@@ -1,0 +1,17 @@
+spring:
+  docker:
+    compose:
+      enabled: true
+      lifecycle-management: start-only   # los contenedores siguen vivos al detener la app
+  jpa:
+    show-sql: true
+
+logging:
+  level:
+    com.jornal: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"

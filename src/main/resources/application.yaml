@@ -1,7 +1,9 @@
 spring:
   application:
     name: jornal
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   jpa:
     hibernate:
-      ddl-auto: validate   # el esquema lo manejan las migraciones, no Hibernate
+      ddl-auto: validate
     open-in-view: false
