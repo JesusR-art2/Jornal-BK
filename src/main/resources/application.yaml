@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: jornal
+  jpa:
+    hibernate:
+      ddl-auto: validate   # el esquema lo manejan las migraciones, no Hibernate
+    open-in-view: false
