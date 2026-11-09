@@ -1,3 +1,8 @@
+jornal:
+  security:
+    jwt:
+      issuer: jornal-dev
+      secret: ${JWT_SECRET:dev-only-secret-change-me-minimum-32-bytes!!}
 spring:
   docker:
     compose:

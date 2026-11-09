@@ -1,3 +1,8 @@
+jornal:
+  security:
+    jwt:
+      issuer: ${JWT_ISSUER}
+      secret: ${JWT_SECRET}
 spring:
   docker:
     compose:
