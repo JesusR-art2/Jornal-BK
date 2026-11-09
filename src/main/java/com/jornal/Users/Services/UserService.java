@@ -1,9 +1,12 @@
-package com.jornal.Users;
+package com.jornal.Users.Services;
 
 
 import com.jornal.Shared.ApiException;
 import com.jornal.Users.DTO.RegisterRequest;
 import com.jornal.Users.DTO.UserResponse;
+import com.jornal.Users.User;
+import com.jornal.Users.UserMapper;
+import com.jornal.Users.UserRepository;
 import com.jornal.Users.enums.ErrorUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;

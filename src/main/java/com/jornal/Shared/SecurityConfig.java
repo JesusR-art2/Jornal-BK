@@ -1,5 +1,6 @@
 package com.jornal.Shared;
 
+import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -12,9 +13,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtValidators;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.*;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
@@ -43,9 +42,9 @@ public class SecurityConfig {
         byte[] bytes = properties.secret().getBytes(StandardCharsets.UTF_8);
         if (bytes.length < 32){
             throw new IllegalStateException(
-                    "Jornal.security.jet.secret must be at least 32 bytes long");
+                    "Jornal.security.jWt.secret must be at least 32 bytes long");
         }
-        return new SecretKeySpec(bytes, "HmacSha256");
+        return new SecretKeySpec(bytes, "HmacSHA256");
     }
     @Bean
     JwtDecoder jwtDecoder(SecretKey key, JwtProperties properties) {
@@ -54,6 +53,10 @@ public class SecurityConfig {
                 .build();
         decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(properties.issuer()));
         return decoder;
+    }
+    @Bean
+    JwtEncoder jwtEncoder(SecretKey key) {
+        return new NimbusJwtEncoder(new ImmutableSecret<>(key));
     }
 
     @Bean
