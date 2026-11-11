@@ -37,7 +37,7 @@ public class AuthService {
         boolean passwordOk = passwordEncoder.matches(request.password(),hash);
 
         if (user == null || !passwordOk || !user.isActive()){
-            throw new ApiException(ErrorUser.INVALID_CREDENTIALS);
+            throw new ApiException(ErrorUser.USER003_INVALID_CREDENTIALS);
         }
         return jwtService.issue(user);
     }

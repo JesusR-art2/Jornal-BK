@@ -1,6 +1,5 @@
 package com.jornal.Users;
 
-import com.jornal.Users.enums.Rol;
 import com.jornal.Users.enums.VerificationState;
 import jakarta.persistence.*;
 import lombok.*;

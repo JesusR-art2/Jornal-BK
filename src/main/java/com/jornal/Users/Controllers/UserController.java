@@ -1,13 +1,15 @@
 package com.jornal.Users.Controllers;
 
+import com.jornal.Users.DTO.ChangePasswordRequest;
+import com.jornal.Users.DTO.UpdateUserRequest;
 import com.jornal.Users.DTO.UserResponse;
 import com.jornal.Users.Services.UserService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
@@ -21,6 +23,29 @@ public class UserController {
     @GetMapping
     public UserResponse findById(@AuthenticationPrincipal Jwt jwt){
         return userService.findById(UUID.fromString(jwt.getSubject()));
+    }
+
+    @PatchMapping
+    public UserResponse update(@AuthenticationPrincipal Jwt jwt,
+                               @Valid @RequestBody UpdateUserRequest request){
+        return userService.update(userId(jwt), request);
+    }
+
+    @PutMapping
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void updatePassword(@AuthenticationPrincipal Jwt jwt,
+                                @Valid @RequestBody ChangePasswordRequest request){
+        userService.updatePassword(userId(jwt), request);
+    }
+
+    @DeleteMapping
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@AuthenticationPrincipal Jwt jwt){
+        userService.deactivate(userId(jwt));
+    }
+
+    private UUID userId(Jwt jwt) {
+        return UUID.fromString(jwt.getSubject());
     }
 
 }

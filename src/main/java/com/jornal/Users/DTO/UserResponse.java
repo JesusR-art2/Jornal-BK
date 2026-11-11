@@ -1,7 +1,6 @@
 package com.jornal.Users.DTO;
 
-import com.jornal.Users.User;
-import com.jornal.Users.enums.Rol;
+import com.jornal.Users.Rol;
 import com.jornal.Users.enums.VerificationState;
 
 import java.util.UUID;

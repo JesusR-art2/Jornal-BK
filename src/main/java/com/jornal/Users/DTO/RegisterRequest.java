@@ -1,5 +1,5 @@
 package com.jornal.Users.DTO;
-import com.jornal.Users.enums.Rol;
+import com.jornal.Users.Rol;
 import jakarta.validation.constraints.*;
 
 public record RegisterRequest(
