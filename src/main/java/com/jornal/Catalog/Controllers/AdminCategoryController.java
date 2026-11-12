@@ -5,8 +5,11 @@ import com.jornal.Catalog.CategoryService;
 import com.jornal.Catalog.DTO.CategoryRequest;
 import com.jornal.Catalog.DTO.CategoryResponse;
 import com.jornal.Catalog.DTO.UpdateCategoryRequest;
+import com.jornal.Shared.PageResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -23,8 +26,14 @@ public class AdminCategoryController {
     private final CategoryService categoryService;
 
     @GetMapping
-    public List<CategoryResponse> list(){
-        return categoryService.findAll();
+    public PageResponse<CategoryResponse> list(@RequestParam(required = false) Boolean active,
+                                               @RequestParam(required = false) String q,
+                                               @RequestParam(defaultValue = "0") int page,
+                                               @RequestParam(defaultValue = "20") int size) {
+        var pageable = PageRequest.of(Math.max(page, 0),
+                Math.min(Math.max(size, 1), 100),
+                Sort.by("name").ascending());
+        return categoryService.findAll(active, q, pageable);
     }
 
     @GetMapping("/{id}")
