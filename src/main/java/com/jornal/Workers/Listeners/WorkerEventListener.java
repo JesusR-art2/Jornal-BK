@@ -1,6 +1,6 @@
 package com.jornal.Workers.Listeners;
 
-import com.jornal.Users.UserAccessChangedEvent;
+import com.jornal.users.UserAccessChangedEvent;
 import com.jornal.Workers.WorkerProfileRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;

@@ -1,9 +1,9 @@
 package com.jornal.Workers.Controllers;
 
-import com.jornal.Workers.DTO.AvailabilityRequest;
-import com.jornal.Workers.DTO.PublicWorkerResponse;
-import com.jornal.Workers.DTO.WorkerProfileRequest;
-import com.jornal.Workers.DTO.WorkerProfileResponse;
+import com.jornal.Workers.dto.AvailabilityRequest;
+import com.jornal.Workers.dto.PublicWorkerResponse;
+import com.jornal.Workers.dto.WorkerProfileRequest;
+import com.jornal.Workers.dto.WorkerProfileResponse;
 import com.jornal.Workers.WorkerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
