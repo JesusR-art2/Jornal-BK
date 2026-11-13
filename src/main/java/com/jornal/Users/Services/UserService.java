@@ -11,6 +11,7 @@ import com.jornal.Users.DTO.UserResponse;
 import com.jornal.Users.enums.ErrorUser;
 import com.jornal.Users.enums.VerificationState;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -27,6 +28,7 @@ public class UserService implements UserApi{
     private final UserRepository repository;
     private final UserMapper mapper;
     private final PasswordEncoder passwordEncoder;
+    private final ApplicationEventPublisher events;
 
     @Transactional
     public UserResponse save(RegisterRequest request) {
@@ -100,7 +102,14 @@ public class UserService implements UserApi{
     public Optional<UserSummary> findSummaryById(UUID id) {
         return repository.findById(id)
                 .filter(User::isActive)
-                .map(u -> new UserSummary(u.getId(), u.getName(), u.getRol()));
+                .map(u -> new UserSummary(u.getId(), u.getName(), u.getRol(),
+                        u.getVerificationState() == VerificationState.VERIFIED));
+    }
+
+    private void publishAccess(User user) {
+        boolean eligible = user.isActive()
+                && user.getVerificationState() == VerificationState.VERIFIED;
+        events.publishEvent(new UserAccessChangedEvent(user.getId(), eligible));
     }
 
     private User getActiveOrThrow(UUID id){
