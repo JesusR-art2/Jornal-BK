@@ -2,9 +2,11 @@ package com.jornal.catalog;
 
 import com.jornal.catalog.DTO.CategoryRequest;
 import com.jornal.catalog.DTO.CategoryResponse;
+import com.jornal.catalog.DTO.TranslationRequest;
 import com.jornal.catalog.DTO.UpdateCategoryRequest;
 import com.jornal.catalog.enums.ErrorCatalog;
 import com.jornal.shared.ApiException;
+import com.jornal.shared.Locales;
 import com.jornal.shared.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -24,6 +26,7 @@ public class CategoryService implements CatalogApi{
 
     private final CategoryRepository repository;
     private final CategoryMapper mapper;
+    private final CategoryTranslationRepository translationRepository;
 
     @Transactional(readOnly = true)
     public PageResponse<CategoryResponse> findAll(Boolean active, String q, Pageable pageable){
@@ -80,6 +83,20 @@ public class CategoryService implements CatalogApi{
             return List.of();
         }
         return mapper.toSummaries(repository.findByIdInAndActiveTrue(ids));
+    }
+
+    @Transactional
+    public void upsertTranslation(UUID categoryId, String locale, TranslationRequest req) {
+        if (!Locales.SUPPORTED.contains(locale)) {
+            throw new ApiException(ErrorCatalog.CAT003_LOCALE_NOT_SUPPORTED);
+        }
+        repository.findById(categoryId)
+                .orElseThrow(() -> new ApiException(ErrorCatalog.CAT001_CATEGORY_NOTFOUND, categoryId)); // usa tu código real
+        CategoryTranslation t = translationRepository.findByCategoryIdAndLocale(categoryId, locale)
+                .orElseGet(() -> { var n = new CategoryTranslation(); n.setCategoryId(categoryId); n.setLocale(locale); return n; });
+        t.setName(req.name().trim());
+        t.setDescription(req.description());
+        translationRepository.save(t);
     }
 
     private static String toPattern(String q) {

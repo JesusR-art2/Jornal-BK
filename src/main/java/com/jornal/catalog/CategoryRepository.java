@@ -1,6 +1,6 @@
 package com.jornal.catalog;
 
-import io.lettuce.core.dynamic.annotation.Param;
+import org.springframework.data.repository.query.Param;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -20,6 +20,20 @@ public interface CategoryRepository extends JpaRepository<Category, UUID> {
     Page<Category> findAll(@Param("active") Boolean active,
                           @Param("pattern") String pattern,
                           Pageable pageable);
+
+    @Query(value = """
+    SELECT c.* FROM categories c
+    WHERE c.active = true AND (
+        unaccent(lower(c.slug)) LIKE unaccent(lower(:pattern)) ESCAPE '\\'
+        OR EXISTS (
+            SELECT 1 FROM category_translations t
+            WHERE t.category_id = c.id
+              AND unaccent(lower(t.name)) LIKE unaccent(lower(:pattern)) ESCAPE '\\'
+        )
+    )
+    ORDER BY c.name
+    """, nativeQuery = true)
+    List<Category> searchActive(@Param("pattern") String pattern);
 
     List<Category> findByIdInAndActiveTrue(Collection<UUID> ids);
 

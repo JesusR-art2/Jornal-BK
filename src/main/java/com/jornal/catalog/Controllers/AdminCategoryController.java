@@ -4,6 +4,7 @@ package com.jornal.catalog.Controllers;
 import com.jornal.catalog.CategoryService;
 import com.jornal.catalog.DTO.CategoryRequest;
 import com.jornal.catalog.DTO.CategoryResponse;
+import com.jornal.catalog.DTO.TranslationRequest;
 import com.jornal.catalog.DTO.UpdateCategoryRequest;
 import com.jornal.shared.PageResponse;
 import jakarta.validation.Valid;
@@ -11,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -50,6 +52,14 @@ public class AdminCategoryController {
     public CategoryResponse update(@PathVariable UUID id,
                                    @Valid @RequestBody UpdateCategoryRequest request){
         return categoryService.update(id, request);
+    }
+    @PutMapping("/{id}/translations/{locale}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public ResponseEntity<Void> upsertTranslation(@PathVariable UUID id,
+                                                  @PathVariable String locale,
+                                                  @Valid @RequestBody TranslationRequest request) {
+        categoryService.upsertTranslation(id, locale, request);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/deactivate")
