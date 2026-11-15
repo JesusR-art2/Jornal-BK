@@ -18,6 +18,13 @@ public interface UserMapper {
             nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     @Mapping(target = "name", source = "name")
     @Mapping(target = "phone", source = "phone")
+    @Mapping(target = "locale", ignore = true)             // lo resuelve el servicio
+    @Mapping(target = "countryCode", ignore = true)
+    @Mapping(target = "termsVersion", ignore = true)
+    @Mapping(target = "termsAcceptedAt", ignore = true)
+    @Mapping(target = "privacyVersion", ignore = true)
+    @Mapping(target = "privacyAcceptedAt", ignore = true)
+    @Mapping(target = "consentUpToDate", ignore = true)
     void updateFromRequest(UpdateUserRequest request, @MappingTarget User user);
 
     User toEntity(RegisterRequest request);

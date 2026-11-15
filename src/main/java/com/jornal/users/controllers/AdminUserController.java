@@ -1,6 +1,6 @@
 package com.jornal.users.controllers;
 
-import com.jornal.Shared.PageResponse;
+import com.jornal.shared.PageResponse;
 import com.jornal.users.dto.UserResponse;
 import com.jornal.users.dto.VerificationRequest;
 import com.jornal.users.Rol;

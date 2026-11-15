@@ -7,7 +7,10 @@ public record RegisterRequest(
         @NotBlank @Size(min = 8, max = 72) String password,
         @NotBlank @Size(max = 120) String name,
         @Size(max = 30) String phone,
-        @NotNull Rol rol
+        @NotNull Rol rol,
+        @NotBlank @Pattern(regexp = "[A-Za-z]{2}") String country,
+        @Pattern(regexp = "[a-z]{2}-[A-Z]{2}") String locale,
+        @AssertTrue(message = "TERMS_NOT_ACCEPTED") boolean acceptedTerms
 
 ) {
     public RegisterRequest{

@@ -1,8 +1,9 @@
 package com.jornal.users.services;
 
 
-import com.jornal.Shared.ApiException;
-import com.jornal.Shared.PageResponse;
+import com.jornal.shared.ApiException;
+import com.jornal.shared.Locales;
+import com.jornal.shared.PageResponse;
 import com.jornal.users.*;
 import com.jornal.users.dto.ChangePasswordRequest;
 import com.jornal.users.dto.RegisterRequest;
@@ -18,6 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -29,6 +31,9 @@ public class UserService implements UserApi{
     private final UserMapper mapper;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher events;
+    private final CountryRepository countryRepository;
+    private final PhoneNormalizer phoneNormalizer;
+    private final LegalProperties legalProperties;
 
     @Transactional
     public UserResponse save(RegisterRequest request) {
@@ -38,9 +43,26 @@ public class UserService implements UserApi{
         if (repository.existsByEmail(request.email())){
             throw new ApiException(ErrorUser.USER001_EMAIL_REGISTERED);
         }
+        Country country = countryRepository.findByCodeAndEnabledTrue(request.country().toUpperCase())
+                .orElseThrow(() -> new ApiException(ErrorUser.USER007_COUNTRY_NOT_AVAILABLE));
         User user = mapper.toEntity(request);
         user.setPasswordHash(passwordEncoder.encode(request.password()));
-        return mapper.toResponse(repository.save(user));
+
+        user.setCountryCode(country.getCode());
+        user.setLocale(request.locale() != null
+                ? Locales.normalize(request.locale())
+                : Locales.normalize(country.getDefaultLocale()));
+
+        if (request.phone() != null && !request.phone().isBlank()) {
+            user.setPhone(phoneNormalizer.toE164(request.phone(), country.getCode()));
+        }
+
+        Instant now = Instant.now();
+        user.setTermsVersion(legalProperties.termsVersion());
+        user.setTermsAcceptedAt(now);
+        user.setPrivacyVersion(legalProperties.privacyVersion());
+        user.setPrivacyAcceptedAt(now);
+        return toResponseWithConsent(repository.save(user));
     }
     @Transactional(readOnly = true)
     public UserResponse findById(java.util.UUID id) {
@@ -61,7 +83,16 @@ public class UserService implements UserApi{
     public UserResponse update(UUID id, UpdateUserRequest request){
         User user = getActiveOrThrow(id);
         mapper.updateFromRequest(request, user);
-        return mapper.toResponse(user);
+        if (request.locale() != null) {
+            user.setLocale(Locales.normalize(request.locale()));
+        }
+        if (request.phone() != null) {
+            user.setPhone(request.phone().isBlank()
+                    ? null
+                    : phoneNormalizer.toE164(request.phone(), user.getCountryCode()));
+        }
+
+        return toResponseWithConsent(user);
     }
 
     @Transactional
@@ -118,6 +149,12 @@ public class UserService implements UserApi{
             throw new ApiException(ErrorUser.USER002_USER_NOTFOUND, id);
         }
         return user;
+    }
+
+    private UserResponse toResponseWithConsent(User user) {
+        boolean upToDate = legalProperties.termsVersion().equals(user.getTermsVersion())
+                && legalProperties.privacyVersion().equals(user.getPrivacyVersion());
+        return mapper.toResponse(user).withConsentUpToDate(upToDate);
     }
 
 

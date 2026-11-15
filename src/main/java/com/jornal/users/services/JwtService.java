@@ -1,6 +1,6 @@
 package com.jornal.users.services;
 
-import com.jornal.Shared.JwtProperties;
+import com.jornal.shared.JwtProperties;
 import com.jornal.users.dto.TokenResponse;
 import com.jornal.users.User;
 import lombok.RequiredArgsConstructor;

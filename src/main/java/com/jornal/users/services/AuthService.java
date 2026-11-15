@@ -1,6 +1,6 @@
 package com.jornal.users.services;
 
-import com.jornal.Shared.ApiException;
+import com.jornal.shared.ApiException;
 import com.jornal.users.dto.LoginRequest;
 import com.jornal.users.dto.TokenResponse;
 import com.jornal.users.User;

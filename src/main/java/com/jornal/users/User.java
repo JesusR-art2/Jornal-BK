@@ -50,6 +50,24 @@ public class User {
     @Column(name = "updated_in", nullable = false)
     private Instant updatedIn;
 
+    @Column(name = "country_code", nullable = false, length = 2)
+    private String countryCode;
+
+    @Column(nullable = false, length = 10)
+    private String locale;
+
+    @Column(name = "terms_version")
+    private String termsVersion;
+
+    @Column(name = "terms_accepted_at")
+    private Instant termsAcceptedAt;
+
+    @Column(name = "privacy_version")
+    private String privacyVersion;
+
+    @Column(name = "privacy_accepted_at")
+    private Instant privacyAcceptedAt;
+
 
 
 }

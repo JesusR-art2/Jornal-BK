@@ -1,6 +1,6 @@
 package com.jornal.users.enums;
 
-import com.jornal.Shared.ErrorCode;
+import com.jornal.shared.ErrorCode;
 import org.springframework.http.HttpStatus;
 
 public enum ErrorUser implements ErrorCode {
@@ -10,7 +10,11 @@ public enum ErrorUser implements ErrorCode {
     USER003_INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "Incorrect email or password"),
     USER004_ROLE_NOT_ALLOWED(HttpStatus.FORBIDDEN, "This role cannot be selected at registration"),
     USER005_WRONG_PASSWORD(HttpStatus.BAD_REQUEST, "The current password is incorrect"),
-    USER006_SAME_PASSWORD(HttpStatus.BAD_REQUEST, "The new password must be different from the current one");
+    USER006_SAME_PASSWORD(HttpStatus.BAD_REQUEST, "The new password must be different from the current one"),
+    USER007_COUNTRY_NOT_AVAILABLE(HttpStatus.BAD_REQUEST, "Country is not available"),
+    USER008_INVALID_PHONE(HttpStatus.BAD_REQUEST, "Invalid phone number"),
+    AUTH001_INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "Invalid or expired refresh token"),
+    AUTH002_TOO_MANY_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS, "Too many login attempts, try again later");
 
     private final HttpStatus status;
     private final String message;

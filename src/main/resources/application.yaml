@@ -3,6 +3,12 @@ jornal:
     jwt:
       issuer: jornal
       expiration-minutes: 60
+  legal:
+    terms-version: "2026-11-13"
+    privacy-version: "2026-11-13"
+    security:
+      refresh:
+        ttl: 30d
 spring:
   application:
     name: jornal
