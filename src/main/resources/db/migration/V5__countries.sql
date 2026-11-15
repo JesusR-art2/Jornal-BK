@@ -10,7 +10,7 @@ CREATE TABLE countries (
 );
 
 INSERT INTO countries(code, name, currency, default_locale, phone_prefix, commission_bps, document_types, enabled) VALUES
-    ('CO','Colombia', 'COP',es-CO, '+57', 1000, 'CC,CE,PPT', TRUE),
+    ('CO','Colombia', 'COP','es-CO', '+57', 1000, 'CC,CE,PPT', TRUE),
     ('BR', 'Brasil',        'BRL', 'pt-BR', '+55', 1000, 'CPF',             FALSE),
     ('US', 'Estados Unidos','USD', 'en-US', '+1',  1000, 'SSN,PASSPORT',    FALSE),
     ('FR', 'Francia',       'EUR', 'fr-FR', '+33', 1000, 'ID_CARD,PASSPORT',FALSE),

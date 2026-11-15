@@ -8,15 +8,13 @@ import org.mapstruct.*;
 @Mapper(componentModel = "spring")
 public interface UserMapper {
 
+
     @Mapping(target="id", ignore = true)
     @Mapping(target="passwordHash", ignore = true)
     @Mapping(target="active", ignore = true)
     @Mapping(target="createdIn", ignore = true)
     @Mapping(target="updatedIn", ignore = true)
     @Mapping(target = "verificationState", ignore = true)
-    @BeanMapping(ignoreByDefault = true,
-            nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
-    @Mapping(target = "name", source = "name")
     @Mapping(target = "phone", source = "phone")
     @Mapping(target = "locale", ignore = true)             // lo resuelve el servicio
     @Mapping(target = "countryCode", ignore = true)
@@ -24,12 +22,15 @@ public interface UserMapper {
     @Mapping(target = "termsAcceptedAt", ignore = true)
     @Mapping(target = "privacyVersion", ignore = true)
     @Mapping(target = "privacyAcceptedAt", ignore = true)
-    @Mapping(target = "consentUpToDate", ignore = true)
-    void updateFromRequest(UpdateUserRequest request, @MappingTarget User user);
-
     User toEntity(RegisterRequest request);
 
+    @Mapping(target = "consentUpToDate", ignore = true)
     UserResponse toResponse(User user);
+
+    @BeanMapping(ignoreByDefault = true,
+            nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "name", source = "name")
+    void updateFromRequest(UpdateUserRequest request, @MappingTarget User user);
 
 
 }
