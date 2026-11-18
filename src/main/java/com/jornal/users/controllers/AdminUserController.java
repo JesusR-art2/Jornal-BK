@@ -49,6 +49,12 @@ public class AdminUserController {
         userService.activate(id);
     }
 
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID id) {
+        userService.adminDelete(id);
+    }
+
     @PatchMapping("/{id}/verification")
     public UserResponse verify(@PathVariable UUID id,
                                @Valid @RequestBody VerificationRequest request) {

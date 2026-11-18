@@ -3,12 +3,17 @@ jornal:
     jwt:
       issuer: jornal
       expiration-minutes: 60
+    refresh:
+      ttl: 30d
   legal:
     terms-version: "2026-11-13"
     privacy-version: "2026-11-13"
-    security:
-      refresh:
-        ttl: 30d
+  admin:
+    email: ${ADMIN_EMAIL:}
+    password: ${ADMIN_PASSWORD:}
+    name: ${ADMIN_NAME:Administrator}
+    country: ${ADMIN_COUNTRY:CO}
+    locale: ${ADMIN_LOCALE:}
 spring:
   application:
     name: jornal

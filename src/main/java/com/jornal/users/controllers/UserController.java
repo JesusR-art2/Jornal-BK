@@ -1,6 +1,7 @@
 package com.jornal.users.controllers;
 
 import com.jornal.users.dto.ChangePasswordRequest;
+import com.jornal.users.dto.DeleteAccountRequest;
 import com.jornal.users.dto.UpdateUserRequest;
 import com.jornal.users.dto.UserResponse;
 import com.jornal.users.services.UserService;
@@ -20,9 +21,9 @@ public class UserController {
 
     private final UserService userService;
 
-    @GetMapping
+    @GetMapping({"", "/me"})
     public UserResponse findById(@AuthenticationPrincipal Jwt jwt){
-        return userService.findById(UUID.fromString(jwt.getSubject()));
+        return userService.findMe(userId(jwt));
     }
 
     @PatchMapping
@@ -36,6 +37,13 @@ public class UserController {
     public void updatePassword(@AuthenticationPrincipal Jwt jwt,
                                 @Valid @RequestBody ChangePasswordRequest request){
         userService.updatePassword(userId(jwt), request);
+    }
+
+    @PostMapping("/me/deletion")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteAccount(@AuthenticationPrincipal Jwt jwt,
+                              @Valid @RequestBody DeleteAccountRequest request){
+        userService.deleteAccount(userId(jwt), request.currentPassword());
     }
 
     @DeleteMapping

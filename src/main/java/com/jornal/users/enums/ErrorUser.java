@@ -13,6 +13,7 @@ public enum ErrorUser implements ErrorCode {
     USER006_SAME_PASSWORD(HttpStatus.BAD_REQUEST, "The new password must be different from the current one"),
     USER007_COUNTRY_NOT_AVAILABLE(HttpStatus.BAD_REQUEST, "Country is not available"),
     USER008_INVALID_PHONE(HttpStatus.BAD_REQUEST, "Invalid phone number"),
+    USER009_ADMIN_DELETE_FORBIDDEN(HttpStatus.FORBIDDEN, "Administrator accounts cannot be deleted"),
     AUTH001_INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "Invalid or expired refresh token"),
     AUTH002_TOO_MANY_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS, "Too many login attempts, try again later");
 

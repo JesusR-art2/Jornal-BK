@@ -42,6 +42,9 @@ public class User {
     @Column(nullable= false)
     private boolean active = true;
 
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
     @CreationTimestamp
     @Column(name = "created_in", nullable = false, updatable = false)
     private Instant createdIn;

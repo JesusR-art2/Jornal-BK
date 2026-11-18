@@ -16,12 +16,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class WorkerService {
+public class WorkerService implements WorkerApi {
 
     private final WorkerProfileRepository repository;
     private final WorkerProfileMapper mapper;
@@ -69,6 +70,22 @@ public class WorkerService {
         }
         profile.setAvailable(available);
         return WorkerProfileResponse.of(profile, categories);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<WorkerSummary> findSummaryById(UUID workerId) {
+        Optional<UserSummary> user = userApi.findSummaryById(workerId)
+                .filter(u -> u.rol() == Rol.WORKER);
+        if (user.isEmpty()) {
+            return Optional.empty();
+        }
+        return repository.findById(workerId)
+                .map(profile -> new WorkerSummary(
+                        profile.getUserId(), user.get().name(), user.get().verified(),
+                        profile.isAvailable(), profile.getWorkRadiusKm(),
+                        Set.copyOf(profile.getCategoryIds()), profile.getRatingAvg(),
+                        profile.getRatingCount(), user.get().countryCode()));
     }
 
     @Transactional(readOnly = true)

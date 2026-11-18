@@ -74,9 +74,14 @@ public class UserService implements UserApi{
     @Transactional(readOnly = true)
     public PageResponse<UserResponse> findAll(Rol rol, Pageable pageable) {
         Page<User> page = rol == null
-                ? repository.findAll(pageable)
-                : repository.findByRol(rol, pageable);
+                ? repository.findByDeletedAtIsNull(pageable)
+                : repository.findByRolAndDeletedAtIsNull(rol, pageable);
         return PageResponse.from(page.map(mapper::toResponse));
+    }
+
+    @Transactional(readOnly = true)
+    public UserResponse findMe(UUID id) {
+        return toResponseWithConsent(getActiveOrThrow(id));
     }
 
     @Transactional
@@ -107,19 +112,69 @@ public class UserService implements UserApi{
     }
     @Transactional
     public void deactivate(UUID id){
-        getOrThrow(id).setActive(false);
+        User user = getOrThrow(id);
+        if (user.getDeletedAt() == null) {
+            user.setActive(false);
+            publishAccess(user);
+        }
     }
 
     @Transactional
     public void activate(UUID id){
-        getOrThrow(id).setActive(true);
+        User user = getOrThrow(id);
+        if (user.getDeletedAt() != null) {
+            throw new ApiException(ErrorUser.USER002_USER_NOTFOUND, id);
+        }
+        user.setActive(true);
+        publishAccess(user);
     }
 
     @Transactional
     public UserResponse updateVerification(UUID id, VerificationState state){
         User user = getOrThrow(id);
+        if (user.getDeletedAt() != null) {
+            throw new ApiException(ErrorUser.USER002_USER_NOTFOUND, id);
+        }
         user.setVerificationState(state);
+        publishAccess(user);
         return mapper.toResponse(user);
+    }
+
+    @Transactional
+    public void deleteAccount(UUID id, String currentPassword){
+        User user = getActiveOrThrow(id);
+        requireNotAdmin(user);
+        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())){
+            throw new ApiException(ErrorUser.USER005_WRONG_PASSWORD);
+        }
+        anonymize(user);
+        publishAccess(user);
+    }
+
+    @Transactional
+    public void adminDelete(UUID id){
+        User user = getOrThrow(id);
+        if (user.getDeletedAt() == null) {
+            requireNotAdmin(user);
+            anonymize(user);
+            publishAccess(user);
+        }
+    }
+
+    private void anonymize(User user){
+        user.setEmail("deleted-" + user.getId() + "@deleted.invalid");
+        user.setName("Deleted user");
+        user.setPhone(null);
+        user.setPasswordHash("!deleted");
+        user.setVerificationState(VerificationState.PENDING);
+        user.setActive(false);
+        user.setDeletedAt(Instant.now());
+    }
+
+    private void requireNotAdmin(User user){
+        if (user.getRol() == Rol.ADMIN){
+            throw new ApiException(ErrorUser.USER009_ADMIN_DELETE_FORBIDDEN);
+        }
     }
 
     private User getOrThrow(UUID id){
@@ -134,7 +189,8 @@ public class UserService implements UserApi{
         return repository.findById(id)
                 .filter(User::isActive)
                 .map(u -> new UserSummary(u.getId(), u.getName(), u.getRol(),
-                        u.getVerificationState() == VerificationState.VERIFIED));
+                        u.getVerificationState() == VerificationState.VERIFIED,
+                        u.getCountryCode(), u.getLocale()));
     }
 
     private void publishAccess(User user) {
@@ -145,7 +201,7 @@ public class UserService implements UserApi{
 
     private User getActiveOrThrow(UUID id){
         User user = getOrThrow(id);
-        if (!user.isActive()){
+        if (!user.isActive() || user.getDeletedAt() != null){
             throw new ApiException(ErrorUser.USER002_USER_NOTFOUND, id);
         }
         return user;
