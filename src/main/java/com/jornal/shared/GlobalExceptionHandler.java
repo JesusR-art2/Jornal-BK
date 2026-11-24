@@ -1,40 +1,56 @@
 package com.jornal.shared;
 
-import org.springframework.http.*;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.MessageSource;
+import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.http.*;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
-import org.springframework.security.access.AccessDeniedException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Convierte los errores en ProblemDetail. El campo {@code code} es estable; {@code detail} se traduce
+ * con MessageSource (claves {@code error.<CODE>}) al idioma de la petición.
+ */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
+    private final MessageSource messages;
+
+    public GlobalExceptionHandler(MessageSource messages) {
+        this.messages = messages;
+    }
+
     @ExceptionHandler(ApiException.class)
     public ProblemDetail handleApi(ApiException ex) {
         ErrorCode error = ex.getError();
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(error.status(), ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(error.status(),
+                translate(error.name(), ex.getArgs(), ex.getMessage()));
         problem.setProperty("code", error.name());
+        if (!ex.getFieldErrors().isEmpty()) {
+            problem.setProperty("errors", ex.getFieldErrors());
+        }
         return problem;
     }
 
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(
             MethodArgumentNotValidException ex, HttpHeaders headers,
-            HttpStatusCode status, WebRequest request){
+            HttpStatusCode status, WebRequest request) {
 
         Map<String, String> errors = new LinkedHashMap<>();
         ex.getBindingResult().getFieldErrors()
                 .forEach(e -> errors.putIfAbsent(e.getField(), e.getDefaultMessage()));
 
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                HttpStatus.BAD_REQUEST, "The request contains invalid fields");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
+                translate("VALIDATION_ERROR", null, "The request contains invalid fields"));
         problem.setProperty("code", "VALIDATION_ERROR");
         problem.setProperty("errors", errors);
         return ResponseEntity.badRequest().body(problem);
@@ -42,17 +58,22 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ProblemDetail handleAccessDenied(AccessDeniedException ex) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                HttpStatus.FORBIDDEN, "You do not have permission to perform this action");
-        problem.setProperty("code","ACCESS_DENIED");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN,
+                translate("ACCESS_DENIED", null, "You do not have permission to perform this action"));
+        problem.setProperty("code", "ACCESS_DENIED");
         return problem;
     }
+
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpected(Exception ex) {
         log.error("Unexpected error", ex);
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
+                translate("INTERNAL_ERROR", null, "An unexpected error occurred"));
         problem.setProperty("code", "INTERNAL_ERROR");
         return problem;
+    }
+
+    private String translate(String code, Object[] args, String fallback) {
+        return messages.getMessage("error." + code, args, fallback, LocaleContextHolder.getLocale());
     }
 }

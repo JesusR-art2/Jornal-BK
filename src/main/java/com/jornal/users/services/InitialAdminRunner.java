@@ -1,8 +1,8 @@
 package com.jornal.users.services;
 
+import com.jornal.region.RegionApi;
+import com.jornal.region.RegionProfileView;
 import com.jornal.shared.Locales;
-import com.jornal.users.Country;
-import com.jornal.users.CountryRepository;
 import com.jornal.users.Rol;
 import com.jornal.users.User;
 import com.jornal.users.UserRepository;
@@ -14,17 +14,20 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.util.Locale;
 
+/** Crea el administrador inicial de la región si ADMIN_EMAIL y ADMIN_PASSWORD están definidos. */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class InitialAdminRunner implements ApplicationRunner {
 
     private final UserRepository users;
-    private final CountryRepository countries;
     private final PasswordEncoder passwordEncoder;
     private final AdminProperties properties;
+    private final RegionApi regionApi;
+    private final Clock clock;
 
     @Override
     public void run(ApplicationArguments args) {
@@ -39,30 +42,28 @@ public class InitialAdminRunner implements ApplicationRunner {
             return;
         }
 
-        Country country = countries.findByCodeAndEnabledTrue(defaultCountry())
-                .orElseGet(() -> countries.findByEnabledTrueOrderByName().stream()
-                        .findFirst()
-                        .orElseThrow(() -> new IllegalStateException(
-                                "Cannot create initial admin: no enabled country configured")));
+        RegionProfileView profile = regionApi.current();
+        String given = isBlank(properties.givenName()) ? "Admin" : properties.givenName().trim();
+        String family = isBlank(properties.familyName()) ? null : properties.familyName().trim();
 
         User admin = new User();
         admin.setEmail(email);
         admin.setPasswordHash(passwordEncoder.encode(properties.password()));
-        admin.setName(isBlank(properties.name()) ? "Administrator" : properties.name().trim());
+        admin.setGivenName(given);
+        admin.setFamilyName(family);
+        admin.setName(profile.nameOrder().compose(given, family));
         admin.setRol(Rol.ADMIN);
         admin.setVerificationState(VerificationState.VERIFIED);
         admin.setActive(true);
-        admin.setCountryCode(country.getCode());
-        admin.setLocale(isBlank(properties.locale())
-                ? Locales.normalize(country.getDefaultLocale())
-                : Locales.normalize(properties.locale()));
+        admin.setCountryCode(profile.code());
+        admin.setLocale(Locales.normalize(properties.locale(), profile.defaultLocale()));
+        admin.setTermsVersion(profile.termsVersion());
+        admin.setTermsAcceptedAt(clock.instant());
+        admin.setPrivacyVersion(profile.privacyVersion());
+        admin.setPrivacyAcceptedAt(clock.instant());
 
         users.save(admin);
-        log.info("Initial admin created: {}", email);
-    }
-
-    private String defaultCountry() {
-        return isBlank(properties.country()) ? "CO" : properties.country().trim().toUpperCase(Locale.ROOT);
+        log.info("Initial admin created for region {}: {}", profile.code(), email);
     }
 
     private boolean isBlank(String value) {

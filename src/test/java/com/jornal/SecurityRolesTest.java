@@ -7,7 +7,10 @@ import com.jornal.shared.TimeConfig;
 import com.jornal.users.CountryRepository;
 import com.jornal.users.Rol;
 import com.jornal.users.User;
+import com.jornal.region.services.RegionService;
+import com.jornal.users.services.AddressService;
 import com.jornal.users.services.AuthService;
+import com.jornal.users.services.BusinessService;
 import com.jornal.users.services.JwtService;
 import com.jornal.users.services.UserService;
 import com.jornal.workers.WorkerService;
@@ -20,6 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -40,6 +44,30 @@ class SecurityRolesTest {
     @MockitoBean CategoryService categoryService;
     @MockitoBean WorkerService workerService;
     @MockitoBean CountryRepository countryRepository;
+    @MockitoBean RegionService regionService;
+    @MockitoBean AddressService addressService;
+    @MockitoBean BusinessService businessService;
+
+    @Test
+    void businessRoutesOnlyForBusiness() throws Exception {
+        mvc.perform(get("/users/me/business").header("Authorization", bearer(Rol.BUSINESS)))
+                .andExpect(status().isOk());
+        mvc.perform(get("/users/me/business").header("Authorization", bearer(Rol.APPLICANT)))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete("/admin/region-profile/holidays/2026-12-25").header("Authorization", bearer(Rol.BUSINESS)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void securityErrorsAreTranslated() throws Exception {
+        mvc.perform(get("/users/me").header("Accept-Language", "ja-JP"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.detail").value("ログインが必要か、トークンが無効です"));
+        mvc.perform(get("/admin/users").header("Authorization", bearer(Rol.WORKER))
+                        .header("Accept-Language", "pt-BR,pt;q=0.9"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail").value("Você não tem permissão para realizar esta ação"));
+    }
 
     @Test
     void withoutTokenProtectedRoutesReturn401() throws Exception {
@@ -57,6 +85,7 @@ class SecurityRolesTest {
     @Test
     void publicRoutesDoNotNeedToken() throws Exception {
         mvc.perform(get("/countries")).andExpect(status().isOk());
+        mvc.perform(get("/region-profile")).andExpect(status().isOk());
     }
 
     @Test

@@ -7,7 +7,7 @@ import com.jornal.users.UserAccessChangedEvent;
 import com.jornal.users.UserMapper;
 import com.jornal.users.UserRepository;
 import com.jornal.users.enums.VerificationState;
-import com.jornal.users.LegalProperties;
+import com.jornal.region.RegionApi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,7 +37,9 @@ class UserServiceTest {
     @Mock ApplicationEventPublisher events;
     @Mock CountryRepository countryRepository;
     @Mock PhoneNormalizer phoneNormalizer;
-    @Mock LegalProperties legalProperties;
+    @Mock RegionApi regionApi;
+    @Mock AddressService addressService;
+    @Mock BusinessService businessService;
 
     static final Instant NOW = Instant.parse("2026-11-15T12:00:00Z");
 
@@ -46,7 +48,7 @@ class UserServiceTest {
     @BeforeEach
     void setUp() {
         service = new UserService(repository, mapper, passwordEncoder, events, countryRepository,
-                phoneNormalizer, legalProperties, Clock.fixed(NOW, ZoneOffset.UTC));
+                phoneNormalizer, regionApi, addressService, businessService, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -65,6 +67,8 @@ class UserServiceTest {
         assertThat(user.getVerificationState()).isEqualTo(VerificationState.PENDING);
         assertThat(user.isActive()).isFalse();
         assertThat(user.getDeletedAt()).isEqualTo(NOW);
+        verify(addressService).deleteAllOf(id);
+        verify(businessService).deleteOf(id);
 
         ArgumentCaptor<UserAccessChangedEvent> captor = ArgumentCaptor.forClass(UserAccessChangedEvent.class);
         verify(events).publishEvent(captor.capture());

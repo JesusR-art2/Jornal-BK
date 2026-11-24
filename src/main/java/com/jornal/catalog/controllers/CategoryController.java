@@ -2,7 +2,7 @@ package com.jornal.catalog.controllers;
 
 
 import com.jornal.catalog.CategoryService;
-import com.jornal.catalog.dto.CategoryResponse;
+import com.jornal.catalog.dto.CategoryView;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,7 +19,7 @@ public class CategoryController {
     private final CategoryService categoryService;
 
     @GetMapping
-    public List<CategoryResponse> findActive(@RequestParam(required = false) String q) {
+    public List<CategoryView> findActive(@RequestParam(required = false) String q) {
         return categoryService.findActive(q);
     }
 }

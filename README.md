@@ -3,7 +3,7 @@
 Plataforma tipo Uber para que personas, tiendas o empresas soliciten un ayudante o trabajador para una tarea puntual, sin contrato formal (trabajo informal por jornal). El backend está pensado como un **monolito modular** que pueda evolucionar a un sistema distribuido.
 
 > **Estado:** MVP en desarrollo. Última actualización: 24 de noviembre de 2026.
-> Existen la infraestructura, la seguridad con JWT y los módulos `users`, `catalog` y `workers`. El plan por fases para llevarlo a sistema distribuido está en [`documento.md`](documento.md) y el estado de partida en [`docs/ESTADO-ACTUAL.md`](docs/ESTADO-ACTUAL.md). Fase cerrada: **F0 (correcciones)**.
+> Existen la infraestructura, la seguridad con JWT y los módulos `region`, `users`, `catalog` y `workers`. El plan por fases para llevarlo a sistema distribuido está en [`documento.md`](documento.md) y el estado de partida en [`docs/ESTADO-ACTUAL.md`](docs/ESTADO-ACTUAL.md). Fases cerradas: **F0 (correcciones)** y **F1 (perfil regional y localización)**.
 
 ---
 
@@ -94,10 +94,10 @@ Spring Boot ejecuta `docker compose up` por ti, espera a que PostgreSQL y Redis 
 En Windows usa `curl.exe` (con `.exe`) y escapa las comillas del JSON, o prueba desde Postman/Hoppscotch. Los nombres de los campos deben coincidir con los de `RegisterRequest`.
 
 ```bash
-# 1. Registrar (country debe estar habilitado; acceptedTerms es obligatorio)
+# 1. Registrar en la región de la instancia (APP_REGION, por defecto CO); acceptedTerms es obligatorio
 curl -X POST http://localhost:8080/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@jornal.com","password":"Clave12345","name":"Prueba","rol":"WORKER","country":"CO","acceptedTerms":true}'
+  -H "Content-Type: application/json" -H "Accept-Language: es-CO" \
+  -d '{"email":"test@jornal.com","password":"Clave12345","givenName":"Ana","familyName":"Prueba","rol":"WORKER","acceptedTerms":true}'
 
 # 2. Login (devuelve accessToken, tokenType y expiresIn)
 curl -X POST http://localhost:8080/auth/login \
@@ -112,7 +112,12 @@ Respuestas esperadas: `201` al registrar, `409` con `USER001_EMAIL_REGISTERED` s
 
 ### 5. Crear el primer administrador
 
-Un usuario no puede registrarse como `ADMIN` por el endpoint público. Al arrancar, `InitialAdminRunner` crea el administrador (verificado) si están definidas `ADMIN_EMAIL` y `ADMIN_PASSWORD` y ese email no existe. Opcionales: `ADMIN_NAME`, `ADMIN_COUNTRY` (por defecto `CO`) y `ADMIN_LOCALE`. Ver `.env.example`.
+Un usuario no puede registrarse como `ADMIN` por el endpoint público. Al arrancar, `InitialAdminRunner` crea el administrador (verificado) si están definidas `ADMIN_EMAIL` y `ADMIN_PASSWORD` y ese email no existe. Se crea en el país de la instancia (`APP_REGION`). Opcionales: `ADMIN_GIVEN_NAME`, `ADMIN_FAMILY_NAME` y `ADMIN_LOCALE`. Ver `.env.example`.
+
+### Región e idioma
+
+- Cada instancia atiende **un país**: `APP_REGION` (`CO`, `BR`, `US`, `FR` o `JP`; por defecto `CO`). Solo registra usuarios de ese país y usa su perfil regional. Ejemplo: `APP_REGION=JP ./mvnw spring-boot:run`.
+- El idioma de cada respuesta sale del header `Accept-Language` (es-CO, pt-BR, en-US, fr-FR, ja-JP). Si falta o no está soportado, se usa el idioma del perfil y luego en-US. Los mensajes de error se traducen; el `code` no cambia.
 
 En desarrollo también se puede promover un usuario en la base y **volver a hacer login**, porque el rol viaja dentro del token:
 
@@ -194,12 +199,20 @@ jornal-backend
     │   │   ├── JornalBackendApplication.java
     │   │   ├── shared        # ApiException, ErrorCode, GlobalExceptionHandler, RestSecurityErrorHandlers,
     │   │   │                 # SecurityConfig, JwtProperties, TimeConfig (Clock), Locales, PageResponse
-    │   │   ├── users         # raíz: UserApi, UserSummary, UserAccessChangedEvent, Rol, User, Country...
-    │   │   │   ├── controllers   # AuthController, UserController, AdminUserController, CountryController
-    │   │   │   ├── services      # UserService, AuthService, JwtService, PhoneNormalizer, InitialAdminRunner
+    │   │   ├── region        # raíz: RegionApi, RegionProfileView, RegionProfileUpdated, NameOrder, TipMode,
+    │   │   │   │             #       AddressField, TaxRule, PaymentMethod, DocumentType, RegionProfile...
+    │   │   │   ├── controllers   # RegionController (público), AdminRegionController
+    │   │   │   ├── services      # RegionService, DocumentValidators (estrategias), RegionStartupCheck
+    │   │   │   ├── web           # RegionLocaleResolver (Accept-Language → perfil → en-US)
+    │   │   │   ├── dto
+    │   │   │   └── enums         # ErrorRegion
+    │   │   ├── users         # raíz: UserApi, UserSummary, UserAccessChangedEvent, Rol, User, Address, BusinessProfile...
+    │   │   │   ├── controllers   # Auth, User, Address, Business, AdminUser y Country
+    │   │   │   ├── services      # UserService, AddressService, BusinessService, AuthService, JwtService,
+    │   │   │   │                 # PhoneNormalizer, InitialAdminRunner
     │   │   │   ├── dto
     │   │   │   └── enums         # ErrorUser, VerificationState
-    │   │   ├── catalog       # raíz: CatalogApi, CategorySummary, Category, CategoryService, traducciones
+    │   │   ├── catalog       # raíz: CatalogApi, CategorySummary, Category, CategoryService, traducciones, precios
     │   │   │   ├── controllers   # CategoryController, AdminCategoryController
     │   │   │   ├── dto
     │   │   │   └── enums         # ErrorCatalog
@@ -210,11 +223,17 @@ jornal-backend
     │   │       └── enums         # ErrorWorker
     │   └── resources
     │       ├── application.yaml, application-dev.yaml, application-prod.yaml
-    │       └── db/migration      # V1 a V9
+    │       ├── messages*.properties  # errores en en (respaldo), es, pt, fr y ja
+    │       └── db/migration      # V1 a V12
     └── test/java/com/jornal
-        ├── ModularidadTest.java          # límites entre módulos
-        ├── SecurityRolesTest.java        # 200/401/403 por rol con JWT reales
-        ├── JornalBackendApplicationTests # arranque con Testcontainers (requiere Docker)
+        ├── ModularidadTest.java              # límites entre módulos
+        ├── NoCountryConditionalsTest.java    # falla si hay literales de país en el código
+        ├── SecurityRolesTest.java            # 200/401/403 por rol con JWT reales, errores traducidos
+        ├── LocalizationIntegrationTest.java  # criterio de F1 en CO con PostgreSQL real (Docker)
+        ├── JapanRegionIntegrationTest.java   # la misma app con APP_REGION=JP (Docker)
+        ├── JornalBackendApplicationTests     # arranque con Testcontainers (Docker)
+        ├── region/services/DocumentValidatorsTest.java
+        ├── shared/LocalesTest.java
         ├── users/services/UserServiceTest.java
         └── workers/WorkerServiceTest.java
 ```
@@ -229,7 +248,7 @@ Todos los endpoints exigen token salvo los marcados como públicos.
 
 | Método y ruta | Acceso | Descripción |
 |---|---|---|
-| `POST /auth/register` | público | Crear cuenta (no permite `ADMIN`). Exige `country` habilitado y `acceptedTerms=true`; normaliza el teléfono a E.164 y guarda las versiones de términos y privacidad |
+| `POST /auth/register` | público | Crear cuenta en el país de la instancia (no permite `ADMIN`). `givenName` y `familyName` (el nombre se compone con `nameOrder`), `acceptedTerms=true`, `country` opcional (debe coincidir), teléfono validado y normalizado a E.164, `address` opcional validada con el esquema del país. Para `BUSINESS`, `business` obligatorio: `legalName`, `taxIdType` de clase TAX, `taxIdNumber` validado con su estrategia y `billingAddress` |
 | `POST /auth/login` | público | Devuelve `{accessToken, tokenType, expiresIn}` |
 | `GET /countries` | público | Países habilitados con moneda, locale, prefijo y tipos de documento |
 
@@ -238,7 +257,11 @@ Todos los endpoints exigen token salvo los marcados como públicos.
 | Método y ruta | Acceso | Descripción |
 |---|---|---|
 | `GET /users/me` | autenticado | Ver la propia cuenta (incluye `consentUpToDate`) |
-| `PATCH /users/me` | autenticado | Editar nombre, teléfono y locale |
+| `PATCH /users/me` | autenticado | Editar `givenName`, `familyName`, teléfono y locale |
+| `GET /users/me/addresses` | autenticado | Direcciones propias, con campos en el orden del país y `formatted` |
+| `POST /users/me/addresses` | autenticado | Agregar dirección (`{"label", "fields": {...}}`, máximo 10) |
+| `DELETE /users/me/addresses/{id}` | autenticado | Borrar (no si es la dirección de facturación) |
+| `GET /users/me/business` y `PUT` | BUSINESS | Ver y editar el perfil empresarial |
 | `PUT /users/me/password` | autenticado | Cambiar la contraseña (exige la actual y una distinta) |
 | `POST /users/me/deletion` | autenticado | Borrado seguro con confirmación de contraseña (anonimiza; no aplica a admins) |
 | `GET /admin/users?rol=&page=&size=` | ADMIN | Listar con paginación (máx. 100), filtro por rol, sin eliminados, más recientes primero |
@@ -253,15 +276,27 @@ Activar, desactivar, cambiar la verificación y borrar publican `UserAccessChang
 
 | Método y ruta | Acceso | Descripción |
 |---|---|---|
-| `GET /categories?q=` | autenticado | Categorías activas (hasta 20); `q` busca por nombre o slug |
+| `GET /categories?q=` | autenticado | Categorías activas (hasta 20) en el idioma de la petición, ordenadas según ese idioma, con `price` de la región (unidad, monto en unidad menor, moneda y decimales). `q` busca por slug o por el nombre en cualquier idioma, sin tildes |
 | `GET /admin/categories?q=&active=&page=&size=` | ADMIN | Listado con filtros y paginación |
 | `GET /admin/categories/{id}` | ADMIN | Ver una categoría |
 | `POST /admin/categories` | ADMIN | Crear (slug kebab-case, único e inmutable) |
 | `PUT /admin/categories/{id}` | ADMIN | Editar nombre y descripción |
-| `PUT /admin/categories/{id}/translations/{locale}` | ADMIN | Crear o actualizar la traducción (`es-CO`, `en-US`) |
+| `PUT /admin/categories/{id}/translations/{locale}` | ADMIN | Crear o actualizar la traducción (es-CO, pt-BR, en-US, fr-FR, ja-JP) |
+| `PUT /admin/categories/{id}/price` | ADMIN | Precio en la región de la instancia: `{"unit": "DAY", "amountMinor": 90000}`; la moneda sale del perfil |
 | `POST /admin/categories/{id}/deactivate` y `/activate` | ADMIN | Ocultar y mostrar |
 
-Las traducciones existen en la base, pero `/categories` todavía responde el nombre base; se usan en la fase F1.
+Traducción: idioma pedido → idioma del perfil → en-US → nombre base.
+
+### Region (perfil regional)
+
+| Método y ruta | Acceso | Descripción |
+|---|---|---|
+| `GET /region-profile` | público | Perfil del país de la instancia: idiomas, moneda y decimales, zonas horarias, formatos, esquema de dirección, orden del nombre, impuestos, comprobante, documentos, ley de datos, medios de pago, propina, comisión, `version` y `reviewStatus` |
+| `GET /region-profile/holidays?year=` | público | Festivos del año (por defecto, el año actual en la zona del país) |
+| `PUT /admin/region-profile` | ADMIN | Reemplaza el perfil completo. Exige la `version` leída (409 `REG005_VERSION_CONFLICT` si cambió), sube la versión y publica `RegionProfileUpdated` |
+| `PUT /admin/region-profile/holidays/{fecha}` y `DELETE` | ADMIN | Crear, editar o borrar un festivo |
+
+Validadores de documentos por nombre (`documentTypes[].validator`): `regex`, `nit-dv`, `cpf`, `cnpj`, `luhn`, `jp-mynumber`, `jp-corporate`.
 
 ### Workers
 
@@ -289,8 +324,11 @@ Si la cuenta deja de ser elegible (desverificada, desactivada o eliminada), `Wor
 | `V7__category_translations` | `unaccent` y `category_translations` (es-CO, en-US) |
 | `V8__users_soft_delete` | `users.deleted_at` |
 | `V9__users_verification_default` | Default de `verification_state` corregido a `PENDING` |
+| `V10__region_profiles` | Japón; BR, US, FR y JP habilitados, IT deshabilitado. `region_profiles` con direcciones, impuestos, medios de pago, documentos y festivos de los 5 países (valores `VERIFICAR`) |
+| `V11__catalog_i18n_prices` | Traducciones pt-BR, fr-FR y ja-JP; `category_prices` con precios de demostración por país |
+| `V12__users_names_addresses_business` | `given_name` y `family_name`; `addresses` y `address_fields`; `business_profiles`; sin defaults de país en `users` |
 
-La siguiente migración libre es `V10`.
+La siguiente migración libre es `V13`.
 
 ---
 
@@ -313,8 +351,9 @@ La siguiente migración libre es `V10`.
 - Tasas e impuestos se cargan con la marca `VERIFICAR` y su fuente. Datos personales de prueba, ficticios.
 
 **Errores**
-- Un `enum` por módulo (`ErrorUser`, `ErrorCatalog`, `ErrorWorker`) que implementa `ErrorCode`. Prefijos `USER`, `AUTH`, `CAT`, `WRK`.
-- `throw new ApiException(ErrorUser.USER002_USER_NOTFOUND, id)`; `GlobalExceptionHandler` lo convierte en `ProblemDetail` con `code`. Validaciones: `VALIDATION_ERROR` con detalle por campo.
+- Un `enum` por módulo (`ErrorUser`, `ErrorCatalog`, `ErrorWorker`, `ErrorRegion`) que implementa `ErrorCode`. Prefijos `USER`, `AUTH`, `CAT`, `WRK`, `REG`.
+- `throw new ApiException(ErrorUser.USER002_USER_NOTFOUND, id)`; `GlobalExceptionHandler` lo convierte en `ProblemDetail` con `code`. Validaciones: `VALIDATION_ERROR` con detalle por campo. `ApiException.withFields(...)` agrega `errors` (campo → `REQUIRED`, `INVALID_FORMAT`, `TOO_LONG`, `UNKNOWN_FIELD`).
+- Todo código nuevo necesita su clave `error.<CODE>` en los 5 `messages*.properties` (con `{0}` para argumentos; en francés usar el apóstrofo tipográfico ’).
 
 **Capas**
 - Un mapper MapStruct por entidad. Nunca se devuelven entidades JPA desde los controladores.
@@ -327,17 +366,21 @@ La siguiente migración libre es `V10`.
 
 **Implementado**
 - [x] Spring Boot 4.1.2, Java 21, Docker Compose (PostGIS y Redis), perfiles `dev` y `prod`
-- [x] Flyway `V1` a `V9`
-- [x] Spring Modulith y contratos `UserApi`, `CatalogApi`, `WorkerApi`
+- [x] Flyway `V1` a `V12`
+- [x] Spring Modulith y contratos `RegionApi`, `UserApi`, `CatalogApi`, `WorkerApi`
 - [x] Errores centralizados con `ProblemDetail`
 - [x] JWT: registro, login, roles, 401/403 en JSON; pruebas por rol
 - [x] `users`: país, locale, teléfono E.164, consentimiento, cuenta propia, borrado seguro, administración, admin inicial
 - [x] `catalog`: categorías con búsqueda, filtros y traducciones (escritura)
 - [x] `workers`: perfil, categorías, disponibilidad con verificación, vista pública y reacción a eventos
 - [x] **F0**: correcciones del estado inicial (claim `role`, orden por `createdIn`, rutas `/me`, renombres de API, paquetes en minúscula, `Clock`, `V9`)
+- [x] **F1**: perfil regional de 5 países (`APP_REGION`), 5 idiomas con `Accept-Language` y errores traducidos, catálogo traducido con precios por país, nombre en partes con `nameOrder`, direcciones validadas por país, rol `BUSINESS` con identificación fiscal validada por estrategia, administración del perfil con versión y evento
 
 **Verificado con Docker (24/11/2026)**
-- [x] `JornalBackendApplicationTests`: arranque completo con Testcontainers, migraciones V1 a V9 y validación del esquema
+- [x] 55 pruebas en verde: arranque completo, migraciones V1 a V12, F1 en CO y en JP con PostgreSQL real
+
+**Pendiente de confirmar por el equipo**
+- [ ] Valores marcados `VERIFICAR` en `region_profiles`, `region_tax_rules`, `region_holidays` y precios de `category_prices`, con fuentes oficiales vigentes
 
 ---
 
@@ -345,7 +388,6 @@ La siguiente migración libre es `V10`.
 
 El orden y los criterios de terminado están en [`documento.md`](documento.md):
 
-- **F1** perfil regional y localización (5 países, 5 idiomas, catálogo traducido, precios por país, direcciones, rol BUSINESS)
 - **F2** seguridad distribuida (CORS, refresh tokens, claim `region`, RS256)
 - **F3** multi-módulo Maven, 5 cores regionales, RabbitMQ con Outbox, subsistemas
 - **F4** pedidos y saga · **F5** pagos · **F6** asignación y seguimiento · **F7** notificaciones

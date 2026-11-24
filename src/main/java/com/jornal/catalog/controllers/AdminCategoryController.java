@@ -4,6 +4,8 @@ package com.jornal.catalog.controllers;
 import com.jornal.catalog.CategoryService;
 import com.jornal.catalog.dto.CategoryRequest;
 import com.jornal.catalog.dto.CategoryResponse;
+import com.jornal.catalog.dto.CategoryView;
+import com.jornal.catalog.dto.PriceRequest;
 import com.jornal.catalog.dto.TranslationRequest;
 import com.jornal.catalog.dto.UpdateCategoryRequest;
 import com.jornal.shared.PageResponse;
@@ -60,6 +62,12 @@ public class AdminCategoryController {
                                                   @Valid @RequestBody TranslationRequest request) {
         categoryService.upsertTranslation(id, locale, request);
         return ResponseEntity.noContent().build();
+    }
+
+    /** Precio en la región de esta instancia (unidad menor de su moneda). */
+    @PutMapping("/{id}/price")
+    public CategoryView.Price upsertPrice(@PathVariable UUID id, @Valid @RequestBody PriceRequest request) {
+        return categoryService.upsertPrice(id, request);
     }
 
     @PostMapping("/{id}/deactivate")

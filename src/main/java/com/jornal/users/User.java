@@ -26,8 +26,15 @@ public class User {
     @Column(name = "password_hash",nullable = false)
     private String passwordHash;
 
+    /** Nombre para mostrar, compuesto con el name_order del país. */
     @Column(nullable= false)
     private String name;
+
+    @Column(name = "given_name", nullable = false, length = 80)
+    private String givenName;
+
+    @Column(name = "family_name", length = 80)
+    private String familyName;
 
     private String phone;
 
@@ -70,7 +77,4 @@ public class User {
 
     @Column(name = "privacy_accepted_at")
     private Instant privacyAcceptedAt;
-
-
-
 }

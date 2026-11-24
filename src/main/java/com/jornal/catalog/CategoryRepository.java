@@ -32,8 +32,9 @@ public interface CategoryRepository extends JpaRepository<Category, UUID> {
         )
     )
     ORDER BY c.name
+    LIMIT :limit
     """, nativeQuery = true)
-    List<Category> searchActive(@Param("pattern") String pattern);
+    List<Category> searchActive(@Param("pattern") String pattern, @Param("limit") int limit);
 
     List<Category> findByIdInAndActiveTrue(Collection<UUID> ids);
 
