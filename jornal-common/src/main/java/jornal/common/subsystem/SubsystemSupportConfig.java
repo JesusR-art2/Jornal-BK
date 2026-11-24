@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Base de cada subsistema: topología, inbox, caché de perfiles regionales y listener de sus colas.
@@ -18,6 +19,7 @@ import org.springframework.context.annotation.Import;
 @Import(MessagingConfig.class)
 @EnableConfigurationProperties(SubsystemProperties.class)
 @ComponentScan(basePackageClasses = SubsystemSupportConfig.class)
+@EnableScheduling
 public class SubsystemSupportConfig {
 
     @Bean

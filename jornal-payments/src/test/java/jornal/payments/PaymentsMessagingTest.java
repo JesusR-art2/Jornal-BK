@@ -25,24 +25,10 @@ import java.util.function.BooleanSupplier;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** F3: pagos consume su cola regional y procesa cada mensaje una sola vez aunque se reenvíe. */
-@SpringBootTest
-@Import(PaymentsMessagingTest.Containers.class)
+@SpringBootTest(properties = "jornal.payments.simulator.voucher-auto-pay-after=0s")
+@Import(PaymentsTestContainers.class)
 class PaymentsMessagingTest {
 
-    @TestConfiguration(proxyBeanMethods = false)
-    static class Containers {
-        @Bean
-        @ServiceConnection
-        PostgreSQLContainer postgres() {
-            return new PostgreSQLContainer(DockerImageName.parse("postgres:16"));
-        }
-
-        @Bean
-        @ServiceConnection
-        RabbitMQContainer rabbit() {
-            return new RabbitMQContainer(DockerImageName.parse("rabbitmq:4-management"));
-        }
-    }
 
     @Autowired RabbitTemplate rabbit;
     @Autowired Inbox inbox;

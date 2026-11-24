@@ -3,7 +3,7 @@
 Plataforma tipo Uber para que personas, tiendas o empresas soliciten un ayudante o trabajador para una tarea puntual, sin contrato formal (trabajo informal por jornal). El backend está pensado como un **monolito modular** que pueda evolucionar a un sistema distribuido.
 
 > **Estado:** MVP en desarrollo. Última actualización: 24 de noviembre de 2026.
-> Existen la infraestructura, la seguridad con JWT y los módulos `region`, `users`, `catalog` y `workers`. El plan por fases para llevarlo a sistema distribuido está en [`documento.md`](documento.md) y el estado de partida en [`docs/ESTADO-ACTUAL.md`](docs/ESTADO-ACTUAL.md). Fases cerradas: **F0 (correcciones)**, **F1 (perfil regional y localización)** , **F2 P1 (sesión segura)** , **F3 (procesos, regiones e infraestructura)** y **F4 (pedidos y saga)**.
+> Existen la infraestructura, la seguridad con JWT y los módulos `region`, `users`, `catalog` y `workers`. El plan por fases para llevarlo a sistema distribuido está en [`documento.md`](documento.md) y el estado de partida en [`docs/ESTADO-ACTUAL.md`](docs/ESTADO-ACTUAL.md). Fases cerradas: **F0 (correcciones)**, **F1 (perfil regional y localización)**, **F2 P1 (sesión segura)**, **F3 (procesos, regiones e infraestructura)**, **F4 (pedidos y saga)** y **F5 (pagos)**.
 
 ---
 
@@ -92,6 +92,7 @@ Spring Boot ejecuta `docker compose up` con el `docker-compose.yaml` de la raíz
 docker compose -f infra/docker-compose.yml up -d --build --wait                  # CO y BR + subsistemas
 docker compose -f infra/docker-compose.yml --profile full up -d --build --wait   # las 5 regiones
 scripts/demo-mensajeria.sh co                                                    # demostración del flujo de mensajes
+scripts/demo-pagos.sh                                                            # pedido real: autoriza, anula y rechazo simulado
 docker compose -f infra/docker-compose.yml --profile full down                   # apagar (conserva datos)
 ```
 
@@ -216,7 +217,7 @@ jornal
 ├── Dockerfile                     # multietapa; --build-arg MODULE=jornal-core|jornal-payments|...
 ├── docker-compose.yaml            # desarrollo del core: PostGIS, Redis y RabbitMQ
 ├── infra/                         # sistema completo: docker-compose.yml, nginx, postgres, prometheus, grafana
-├── scripts/demo-mensajeria.sh     # demostración Outbox → RabbitMQ → inbox
+├── scripts/                       # demo-mensajeria.sh (Outbox → RabbitMQ → inbox), demo-pagos.sh (F5)
 ├── .env / .env.example            # credenciales locales (.env NO se versiona)
 ├── documento.md                   # plan de desarrollo por fases (F0 a F11)
 ├── docs/ESTADO-ACTUAL.md          # estado de partida del backend
@@ -224,7 +225,7 @@ jornal
 │   ├── events/                    # CloudEvent (sobre 1.0), EventTypes
 │   ├── messaging/                 # Topology (exchange, colas por subsistema y región, DLQ), MessagingConfig
 │   └── subsystem/                 # Inbox, CloudEventListener, CloudEventHandler, RegionProfileCache, /status
-├── jornal-payments/               # subsistema (hoy: esqueleto con inbox y caché de perfiles)
+├── jornal-payments/               # subsistema de pagos: 3 flujos simulados, libro particionado por región
 ├── jornal-dispatch/               # subsistema (esqueleto)
 ├── jornal-notifications/          # subsistema (esqueleto)
 ├── jornal-billing/                # subsistema (esqueleto)
@@ -383,6 +384,33 @@ Cuerpo de cotizar y crear (`RequestDraft`): `categoryId`, `units` (1 a 30), `sch
 
 Cada cambio emite además `jornal.request.status-changed.v1` (notificaciones). Las respuestas de un intento de pago viejo, tardías o duplicadas se ignoran. Plazos (`RequestTimeouts`, una sola instancia con ShedLock): sin respuesta de pagos en 2 min → `CANCELLED`; la hora pasa sin trabajador → `EXPIRED` con compensación; sin confirmación en 24 h → se confirma solo. Concurrencia: versión optimista (`@Version`); un choque devuelve 409 `CONCURRENT_UPDATE` en la API y se reintenta en los mensajes.
 
+### Payments (subsistema `jornal-payments`)
+
+Consume `jornal.request.created/repriced/capture-requested/cancelled` de la cola `payments.<región>` y responde con `jornal.payment.*` por su outbox. El flujo lo elige el medio de pago del perfil regional:
+
+| Flujo | Medios (perfil) | Al crear el pedido | Al confirmar | Si se cancela |
+|---|---|---|---|---|
+| `AUTH_CAPTURE` | tarjeta, PayPal | autoriza (retiene) → `payment.authorized` | captura | anula la retención → `payment.voided` |
+| `CHARGE_REFUND` | PSE, Nequi, Pix, PayPay | cobra de inmediato → `payment.authorized` | se marca capturado | reembolsa → `payment.refunded` |
+| `ASYNC_VOUCHER` | boleto, konbini | emite voucher (pendiente); al pagarse → `payment.authorized`; si vence → `payment.failed` | se marca capturado | anula el voucher o reembolsa |
+
+- **Idempotencia**: un cobro por pedido e intento (`UNIQUE (region, request_id, attempt)`) además del inbox; el proveedor recibe el id del pago como clave de idempotencia. Al recotizar, el intento anterior se anula o reembolsa antes de cobrar el nuevo.
+- **Liquidación** al capturar (`ledger_entries`): `WORKER_PAYOUT` = subtotal − comisión (`commissionBps`), `TIP_PAYOUT` = 100 % de la propina, `PLATFORM_FEE` = comisión + desplazamiento + impuesto sumado. Reembolsos en negativo. Tablas `payments` y `ledger_entries` particionadas por región (LIST).
+- **Interfaz real** (`jornal.payments.gateway.PaymentGateway`): `start(order)`, `capture(ref, amount)`, `cancel(ref)`, `refund(ref, amount)`, todas con clave de idempotencia. Un adaptador real por proveedor y flujo (por ejemplo Wompi o Mercado Pago para CO/BR, Stripe para US/FR, PayPay y konbini para JP) implementa estos cuatro métodos con el API del proveedor y recibe su webhook de confirmación; la lógica de pagos y la saga no cambian. En el prototipo, `SimulatedGateways` cubre los tres flujos.
+- **Simulador** (variables `PAYMENTS_FAILURE_RATE`, `PAYMENTS_DECLINE_METHODS`, `PAYMENTS_LATENCY`, `PAYMENTS_VOUCHER_AUTO_PAY_AFTER`, `PAYMENTS_VOUCHER_EXPIRE_AFTER`) y en caliente con `PUT /simulator`.
+
+| Ruta interna (gateway: `/subsystems/payments/...`) | Descripción |
+|---|---|
+| `GET /payments?requestId=` | Intentos de pago del pedido y su libro de movimientos |
+| `GET /ledger/summary` | Totales por región, moneda y tipo (base del reporte de ingresos) |
+| `GET /simulator` y `PUT /simulator` | Ver y cambiar rechazos, latencia y tiempos de vouchers |
+| `POST /webhooks/vouchers/{paymentId}/paid` | Webhook simulado: el cliente pagó el voucher |
+| `GET /status` | Colas, mensajes procesados y perfiles regionales recibidos |
+
+Los vouchers se dan por pagados solos a los 10 s y vencen a los 90 s, por debajo de los 2 min que el core espera a pagos. Las rutas internas no tienen autenticación en el prototipo.
+
+**Outbox de los subsistemas** (`jornal-common`): `SubsystemOutbox` guarda el mensaje en la tabla `outbox` en la misma transacción y `OutboxRelay` lo envía cada segundo (`FOR UPDATE SKIP LOCKED`, sirve con réplicas). Si RabbitMQ cae, los mensajes esperan.
+
 ## Migraciones
 
 | Versión | Contenido |
@@ -465,7 +493,9 @@ La siguiente migración libre del core es `V16`. Los subsistemas usan `jornal-co
 - [x] **F2 (P1)**: access token de 15 minutos con claim `region` validado, refresh tokens con rotación, detección de reuso y revocación (logout, cambio de contraseña, bloqueo y borrado), CORS y Swagger con Bearer
 - [x] **F3**: Maven multimódulo, `jornal-common`, 4 subsistemas como procesos independientes, RabbitMQ con Outbox, CloudEvents e inbox, Dockerfile multietapa y `infra/docker-compose.yml` con 5 cores, gateway, Mailpit, Prometheus y Grafana
 - [x] **F4**: módulo `requests` con carrito (cotizar), pedido idempotente, precios por perfil, máquina de estados con historial, saga orquestada con compensaciones, plazos con ShedLock y cola `core.<región>` con inbox
-- [x] 77 pruebas en verde (75 del core y 2 de pagos), con PostgreSQL y RabbitMQ reales; la saga se prueba con los subsistemas simulados (camino feliz, pago fallido, sin trabajador, recotización, cancelación y vencimiento)
+- [x] **F5**: subsistema de pagos con interfaz `PaymentGateway` y adaptadores simulados por flujo (autorizar y capturar, cobrar y reembolsar, voucher asíncrono), idempotencia por pedido e intento, libro de movimientos con liquidación, tablas particionadas por región, simulador configurable en caliente y outbox de subsistemas
+- [x] 84 pruebas en verde (75 del core y 9 de pagos), con PostgreSQL y RabbitMQ reales
+- [x] Verificado en Docker (24/11/2026): `scripts/demo-pagos.sh` (un pedido real se autoriza, se anula al cancelarlo y se rechaza con el simulador) y `scripts/demo-mensajeria.sh`
 - [x] Sistema completo verificado con Docker (24/11/2026): las 5 regiones sanas detrás del gateway y `scripts/demo-mensajeria.sh` en verde (el cambio de perfil llega a pagos y el reenvío se procesa una vez)
 
 **Pendiente de confirmar por el equipo**

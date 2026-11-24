@@ -21,12 +21,19 @@ spring:
           initial-interval: 1s
           multiplier: 2
   flyway:
-    locations: classpath:db/subsystem
+    locations: classpath:db/subsystem,classpath:db/migration
 jornal:
   subsystem:
     name: payments
   messaging:
     regions: ${MESSAGING_REGIONS:co,br,us,fr,jp}
+  payments:
+    simulator:
+      failure-rate: ${PAYMENTS_FAILURE_RATE:0}              # 0..1: probabilidad de rechazo
+      decline-methods: ${PAYMENTS_DECLINE_METHODS:}         # medios siempre rechazados, por ejemplo CARD
+      latency: ${PAYMENTS_LATENCY:0ms}
+      voucher-auto-pay-after: ${PAYMENTS_VOUCHER_AUTO_PAY_AFTER:10s}   # 0s = solo por webhook
+      voucher-expire-after: ${PAYMENTS_VOUCHER_EXPIRE_AFTER:90s}
 management:
   endpoints:
     web:
