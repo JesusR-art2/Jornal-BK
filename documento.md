@@ -1,6 +1,6 @@
 # Jornal — Plan de desarrollo para Claude Code
 
-Fecha: 24/11/2026
+Fecha: 24/11/2026 (plan inicial) · Última actualización: 24/11/2026, con el avance hasta F8 y F10 en curso
 
 ## Cómo usar este plan
 
@@ -19,6 +19,44 @@ Reglas para Claude Code:
 - Al cerrar cada fase: pruebas en verde, README actualizado y un commit por fase.
 
 Prioridades: P1 es imprescindible para la sustentación y P2 suma puntos si sobra tiempo. Con poco tiempo, todas las P1 van antes que cualquier P2.
+
+## Estado del avance (24/11/2026)
+
+El backend distribuido está construido hasta F8, y F10 está en curso. Todo está en la rama `avance-proyecto` de GitHub (`main` en GitHub sigue en el estado anterior a F0). La guía de uso, los endpoints y las migraciones están en el `README.md`.
+
+| Fase | Estado | Commit | Cómo se verificó |
+| --- | --- | --- | --- |
+| F0. Correcciones | Hecha | `06f5eab` | Pruebas de seguridad por rol; README con rutas reales |
+| F1. Perfil regional y localización | Hecha | `b1c0ead` | Catálogo en 5 idiomas, validación de nombre, dirección y documento por país, prueba sin condicionales por país |
+| F2. Seguridad (P1) | Hecha | `068c35c` | Access token de 15 min con claim `region`, refresh con rotación y detección de reuso, CORS y Swagger con Bearer |
+| F2. Seguridad (P2) | Pendiente | — | RS256 con JWKS y límite de intentos de login con Redis |
+| F3. Procesos e infraestructura | Hecha (falta TLS) | `3507e0c` | `docker compose up` con 5 cores, 4 subsistemas y gateway; `scripts/demo-mensajeria.sh` |
+| F4. Pedidos y saga | Hecha | `43a65e1` | Camino feliz y compensaciones con subsistemas simulados en pruebas |
+| F5. Pagos | Hecha | `873bdbb` | Tres flujos de pago, idempotencia; `scripts/demo-pagos.sh` |
+| F6. Asignación y seguimiento | Hecha | `6e17431` | Una sola reserva con 8 aceptaciones simultáneas; `scripts/demo-asignacion.sh` |
+| F7. Notificaciones y tiempo real | Hecha | `470dc7b` | Avisos en el idioma de cada persona, WebSocket y Mailpit; `scripts/demo-notificaciones.sh` |
+| F8. Facturación, tasas y calificaciones | Hecha (P1 y P2) | `092c6ca` | Comprobante de los 5 países en pruebas; `scripts/demo-facturacion.sh` (pedido `COMPLETED`, `FE-00000001`, reporte en USD con tasa y fecha) |
+| F9. Frontend | No iniciada | — | Plan detallado en la sección F9; D11 por confirmar |
+| F10. Observabilidad y consola | En curso | `2c1366b` | Compila y pasan sus pruebas; falta cerrar la demostración en Docker |
+| F11. Pruebas de falla y localización | No iniciada | — | Base lista: `scripts/lib.sh` deja evidencias en `docs/evidencias` |
+
+Pruebas automáticas: 107 en verde al cierre de F8 (76 del core, 9 de pagos, 8 de asignación, 10 de notificaciones y 4 de facturación), todas con PostgreSQL, RabbitMQ y Redis reales (Testcontainers). F10 agrega una prueba de integración de 3 casos en el core.
+
+### Cambios respecto al plan original
+
+Lo construido sigue el plan, con estos ajustes que el informe debe reflejar:
+
+| Tema | Plan | Lo implementado | Motivo |
+| --- | --- | --- | --- |
+| JWT entre procesos (D10) | RS256 con JWKS | HS256 con secreto compartido (el respaldo previsto en D10); los subsistemas validan el mismo token | Más rápido de cerrar; RS256 queda como P2 |
+| Enrutamiento | Por subdominio (`co.jornal.localhost`) | Los dos: `/api/{región}/...` (principal) y subdominio | La ruta funciona en cualquier navegador sin editar `hosts` |
+| Outbox de los subsistemas | Spring Modulith en todos | Modulith en el core; en los subsistemas, tabla `outbox` propia con `OutboxRelay` (`FOR UPDATE SKIP LOCKED`) | Los subsistemas usan JDBC simple, sin JPA ni Modulith |
+| Colas | Enlace `<región>.#` | Cada consumidor se enlaza solo a lo que usa (por ejemplo `core.<r>` a `jornal.payment.#`, `jornal.dispatch.#` y `jornal.billing.#`); notificaciones recibe todo | Evita que cada proceso reciba sus propios mensajes |
+| Consulta del contacto | Resilience4j | `GET /internal/contacts/{id}` con token interno (`X-Internal-Token`), 3 intentos con espera creciente; el gateway bloquea `/internal/**` | Menos dependencias; mismo comportamiento |
+| Datos del comprobante | Facturación los pide | Viajan con `capture-requested` → `payment.captured`: líneas, tasas de impuesto, tipo y prefijo de comprobante, idioma del país e identificación fiscal del comercio | Facturación no depende de la caché del perfil ni de otra consulta |
+| Calificar | `POST /requests/{id}/ratings` | `POST /requests/{id}/rating` y `GET /requests/{id}/ratings` | Una calificación por llamada |
+| Consola de administración | Parte de F9 | API lista en el core (`/admin/console`): tablero de la región, salud de cada servicio y colas | F9 solo tiene que mostrarla |
+| Pedido sin trabajador | `AssignmentFailed` a los N s | Plazo configurable (`DISPATCH_SEARCH_TIMEOUT`, 120 s) y máximo de ofertas (`DISPATCH_MAX_OFFERS`, 5) | Para la demo se puede bajar por variable |
 
 ## Punto de partida
 
@@ -54,8 +92,8 @@ Once decisiones fijan el rumbo; cuatro necesitan confirmación del equipo (o del
 | D7 | Asignación por oferta automática secuencial: se ofrece al mejor candidato con tiempo límite y, si no acepta, al siguiente | Resuelve la decisión abierta del roadmap y cumple «proximidad, disponibilidad y balanceo de carga» | Tomada |
 | D8 | Dinero en enteros (BIGINT) en la unidad menor práctica (COP 0, BRL 2, USD 2, EUR 2, JPY 0) + código ISO 4217; nunca float | Regla 4.1.4 del enunciado y del informe | Tomada |
 | D9 | Instantes en UTC (`timestamptz`); el pedido guarda además la zona IANA del lugar del trabajo y se muestra en la zona de quien lo ve | Regla 4.1.5; EE. UU. y Brasil tienen varias zonas | Tomada |
-| D10 | JWT RS256 con clave pública (JWKS) en lugar de HS256 compartido | Los subsistemas validan tokens sin conocer el secreto. Respaldo si falta tiempo: HS256 compartido | Tomada |
-| D11 | Frontend en Angular, traducciones en tiempo de ejecución (Transloco), `Intl` para formatos y Leaflet con OpenStreetMap para mapas | Encaja con Spring Boot, cambia de idioma sin recompilar y maneja respaldo de traducciones | Por confirmar |
+| D10 | JWT RS256 con clave pública (JWKS) en lugar de HS256 compartido | Los subsistemas validan tokens sin conocer el secreto. Respaldo si falta tiempo: HS256 compartido | Tomada; hoy funciona con el respaldo HS256 y RS256 queda como P2 |
+| D11 | Frontend en Angular, traducciones en tiempo de ejecución (Transloco), `Intl` para formatos y Leaflet con OpenStreetMap para mapas | Encaja con Spring Boot, cambia de idioma sin recompilar y maneja respaldo de traducciones | Por confirmar (bloquea el inicio de F9) |
 
 ## Arquitectura objetivo
 
@@ -250,7 +288,7 @@ Son 12 fases en orden; cada una cierra con un criterio verificable. Si el tiempo
 - Agregar el bean `Clock` y reemplazar toda lectura directa de la hora.
 - Pruebas de seguridad por rol: al menos un 200 y un 403 por rol.
 
-- [ ] Terminado cuando las pruebas pasan y el README refleja las rutas reales y V1 a V8.
+- [x] Terminado cuando las pruebas pasan y el README refleja las rutas reales y V1 a V8. Hecho en `06f5eab`.
 
 ### F1. Perfil regional y localización en el core (P1)
 
@@ -262,7 +300,7 @@ Son 12 fases en orden; cada una cierra con un criterio verificable. Si el tiempo
 - Usuarios: `given_name` y `family_name` (migración que rellena desde `name`), mostrados según `name_order`; tabla `addresses` validada con `address_schema`.
 - Rol BUSINESS (comercio) con perfil empresarial: razón social, tipo y número fiscal validado por `validator` y dirección de facturación.
 
-- [ ] Terminado cuando `/categories` responde traducido en los 5 idiomas, el registro valida teléfono, dirección y nombre por país, y una búsqueda en el código no encuentra condicionales por país.
+- [x] Terminado cuando `/categories` responde traducido en los 5 idiomas, el registro valida teléfono, dirección y nombre por país, y una búsqueda en el código no encuentra condicionales por país. Hecho en `b1c0ead` (`NoCountryConditionalsTest` revisa el código).
 
 ### F2. Seguridad para el entorno distribuido (P1 y P2)
 
@@ -270,7 +308,7 @@ Son 12 fases en orden; cada una cierra con un criterio verificable. Si el tiempo
 - P1: refresh tokens con tabla propia, rotación y revocación; access token de 15 minutos.
 - P2: RS256 con JWKS (D10) y límite de intentos de login con Redis (usa AUTH002).
 
-- [ ] Terminado cuando el frontend inicia sesión y renueva el token, y los subsistemas validan el JWT.
+- [x] P1 hecha en `068c35c`: login, refresh con rotación y logout funcionan por API, y asignación, notificaciones y facturación validan el JWT del core. Falta probarlo desde el frontend (F9) y la parte P2.
 
 ### F3. Procesos, regiones e infraestructura (P1)
 
@@ -279,7 +317,7 @@ Son 12 fases en orden; cada una cierra con un criterio verificable. Si el tiempo
 - Spring Modulith: `starter-jpa` (registro de publicaciones como Outbox) y `events-amqp` para externalizar los eventos marcados, con el sobre CloudEvents. Tabla inbox en cada consumidor.
 - Esqueleto de los 4 subsistemas con Actuator, conexión a RabbitMQ y las mismas convenciones de errores.
 
-- [ ] Terminado cuando `docker compose up` levanta todo y un evento publicado en `core-co` llega a `payments.co` y se procesa una sola vez aunque se reenvíe.
+- [x] Terminado cuando `docker compose up` levanta todo y un evento publicado en `core-co` llega a `payments.co` y se procesa una sola vez aunque se reenvíe. Hecho en `3507e0c` (`scripts/demo-mensajeria.sh`). Pendiente menor: TLS de desarrollo en el gateway (hoy HTTP en el puerto 8000).
 
 ### F4. Solicitudes, carrito y saga (P1)
 
@@ -288,7 +326,7 @@ Son 12 fases en orden; cada una cierra con un criterio verificable. Si el tiempo
 - Endpoints: cotizar, crear (con `Idempotency-Key`), modificar antes de la asignación (recotiza y vuelve a autorizar), cancelar, listar, detalle y confirmar.
 - Orquestador de la saga con sus compensaciones y tareas programadas con ShedLock.
 
-- [ ] Terminado cuando, con los subsistemas simulados en pruebas, el pedido recorre el camino feliz y los dos caminos de compensación.
+- [x] Terminado cuando, con los subsistemas simulados en pruebas, el pedido recorre el camino feliz y los dos caminos de compensación. Hecho en `43a65e1` (`RequestSagaIntegrationTest`).
 
 ### F5. Pagos (P1)
 
@@ -296,7 +334,7 @@ Son 12 fases en orden; cada una cierra con un criterio verificable. Si el tiempo
 - Idempotencia por pedido e intento, tablas particionadas por región y libro de movimientos con comisión y liquidación.
 - El README documenta la interfaz real que reemplazaría al simulador, como exige el enunciado.
 
-- [ ] Terminado cuando autorizar, capturar, anular y reembolsar funcionan en los tres flujos y un mensaje duplicado no cobra dos veces.
+- [x] Terminado cuando autorizar, capturar, anular y reembolsar funcionan en los tres flujos y un mensaje duplicado no cobra dos veces. Hecho en `873bdbb` (`PaymentFlowsTest`, `scripts/demo-pagos.sh`).
 
 ### F6. Asignación y seguimiento (P1)
 
@@ -305,7 +343,7 @@ Son 12 fases en orden; cada una cierra con un criterio verificable. Si el tiempo
 - Candidatos: misma categoría, dentro del radio, disponibles y sin reserva; orden por distancia, calificación y pedidos del día (balanceo de carga).
 - Ofertas secuenciales con 30 a 60 s de plazo, reserva atómica y `WorkerAssigned` o `AssignmentFailed`. La posición en vivo sale como `WorkerLocationUpdated` por el exchange no durable.
 
-- [ ] Terminado cuando dos pedidos simultáneos por el mismo trabajador dejan una sola reserva y el cliente ve moverse al trabajador.
+- [x] Terminado cuando dos pedidos simultáneos por el mismo trabajador dejan una sola reserva y el cliente ve moverse al trabajador. Hecho en `6e17431` (`DispatchFlowTest`, `scripts/demo-asignacion.sh`: oferta a 1,3 km, aceptación y seguimiento hasta 0,2 km).
 
 ### F7. Notificaciones y tiempo real (P1)
 
@@ -313,7 +351,7 @@ Son 12 fases en orden; cada una cierra con un criterio verificable. Si el tiempo
 - Canales: en la app por WebSocket (STOMP, JWT en el CONNECT y permiso por tema), correo a Mailpit, y SMS y push simulados en el log.
 - El contacto del destinatario se pide por REST al core de su región, con reintento.
 
-- [ ] Terminado cuando cliente y trabajador reciben cada cambio de estado en su idioma y el correo aparece en Mailpit.
+- [x] Terminado cuando cliente y trabajador reciben cada cambio de estado en su idioma y el correo aparece en Mailpit. Hecho en `470dc7b` (`NotificationsFlowTest`, `scripts/demo-notificaciones.sh`: 6 avisos en español al cliente y 5 en inglés al trabajador).
 
 ### F8. Facturación, tasas de cambio y calificaciones (P1 y P2)
 
@@ -321,11 +359,65 @@ Son 12 fases en orden; cada una cierra con un criterio verificable. Si el tiempo
 - P1: calificaciones en ambos sentidos, solo sobre pedidos `COMPLETED`.
 - P2: tasas de cambio con par, tasa, fuente y fecha; proveedor simulado y carga manual; reporte consolidado de ingresos en la moneda que elija el administrador. Los cobros siempre van en moneda local.
 
-- [ ] Terminado cuando cada país emite su tipo de comprobante y el reporte consolidado muestra la tasa usada con su fecha.
+- [x] Terminado cuando cada país emite su tipo de comprobante y el reporte consolidado muestra la tasa usada con su fecha. Hecho en `092c6ca` (`BillingFlowTest` con los 5 países, `scripts/demo-facturacion.sh`).
 
 ### F9. Frontend (P1)
 
 Una sola app Angular, móvil primero, con selector de país e idioma y una vista por rol. Transloco con respaldo de traducciones, `Intl` con las anulaciones del perfil, Noto Sans JP para japonés, y formularios de nombre y dirección generados desde el perfil.
+
+**Antes de empezar:** confirmar con el equipo D11 (Angular, Transloco y Leaflet), D1 (nombre del producto que se ve en la interfaz) y D4 (pedido de prueba). El backend ya expone todo lo que necesita cada pantalla, así que F9 no requiere cambios de API salvo ajustes menores.
+
+#### Tecnología propuesta (D11)
+
+| Necesidad | Herramienta | Nota |
+| --- | --- | --- |
+| Framework | Angular (componentes standalone y signals) con TypeScript estricto | Una sola app con rutas por rol |
+| Cliente de la API | Generado desde el OpenAPI del core (`/api/co/v3/api-docs`) con `openapi-generator` (`typescript-angular`) | Los tipos se regeneran si cambia el backend; los subsistemas se llaman con servicios escritos a mano (pocas rutas) |
+| Traducciones | Transloco: `assets/i18n/{es-CO,pt-BR,en-US,fr-FR,ja-JP}.json`, respaldo a en-US y carga en tiempo de ejecución | Los textos de error vienen ya traducidos del backend (`Accept-Language`) |
+| Formatos | `Intl.NumberFormat`, `Intl.DateTimeFormat` con la zona del pedido y las anulaciones del perfil (`moneyScale`, `hourCycle`, `firstDayOfWeek`) | Dinero siempre en unidades menores convertido solo al mostrar |
+| Tiempo real | `@stomp/rx-stomp` sobre `ws://…/subsystems/notifications/ws`, JWT en el CONNECT | Temas `/topic/users.<id>` y `/topic/requests.<id>` |
+| Mapas | Leaflet con OpenStreetMap | Lugar del trabajo, ubicación base del trabajador y seguimiento en vivo |
+| Estilos | Angular Material (CDK) o CSS propio con variables; fuente Noto Sans y Noto Sans JP | Diseño móvil primero (360 px) y accesible (contraste, foco, etiquetas) |
+| Pruebas | Unitarias con el runner de Angular; extremo a extremo con Playwright | Playwright también toma las capturas para el informe (sección 6.4) |
+
+#### Cómo se conecta con el backend
+
+- **Región y sesión:** la pantalla inicial elige país e idioma y fija la URL base `/api/{región}`. El token de acceso dura 15 minutos: un interceptor agrega `Authorization`, `Accept-Language` y `X-Correlation-Id` a cada petición; ante un 401 usa `POST /auth/refresh` una vez y, si falla, cierra la sesión. El refresh token se guarda en memoria y en `sessionStorage`, nunca en `localStorage`.
+- **Formularios por país:** registro, dirección y perfil de comercio se generan desde `GET /region-profile` (`addressSchema`, `nameOrder`, `documentTypes`, `phonePrefix`, `paymentMethods`, `tipMode`). Los errores por campo (`REQUIRED`, `INVALID_FORMAT`…) se muestran junto al campo.
+- **Pedido:** catálogo (`GET /categories`), cotización (`POST /requests/quote`) con su desglose, creación con `Idempotency-Key` generada en el cliente, seguimiento (`GET /requests/{id}`, WebSocket y `GET /subsystems/dispatch/tracking/{id}`), confirmación, comprobante (`/subsystems/billing/receipts/{id}` y su versión HTML para imprimir) y calificación (`POST /requests/{id}/rating`).
+- **Trabajador:** perfil y disponibilidad (`/workers/me`), ofertas con cuenta regresiva (`/subsystems/dispatch/offers/me`, aceptar o rechazar), envío de ubicación cada 5 a 10 s (`PUT /subsystems/dispatch/locations/me`) y cambios de estado (`en-route`, `start`, `finish`).
+- **Administrador:** consola (`/admin/console`), usuarios y verificación, categorías con traducciones y precios, perfil regional, tasas y reporte de ingresos (`/subsystems/billing/admin/...`), más un enlace a Grafana.
+- **Despliegue:** carpeta `frontend/` en este repositorio. En desarrollo, `ng serve` con proxy al gateway (`localhost:8000`). En Docker, una imagen Nginx con el build que el gateway sirve en `/`; así la app y la API comparten origen y no hace falta CORS.
+
+#### Metodología
+
+Trabajo iterativo por incrementos verticales: cada iteración entrega pantallas completas que funcionan contra el backend real en Docker, no capas sueltas. Iteraciones cortas (una semana sugerida) con revisión al final de cada una.
+
+| Iteración | Objetivo | Entregable | Termina cuando |
+| --- | --- | --- | --- |
+| I0. Base | Proyecto Angular, cliente OpenAPI generado, Transloco con los 5 idiomas, interceptores, selector de país e idioma, layout móvil | App que arranca en Docker detrás del gateway | Cambia de idioma sin recargar y llama a `/region-profile` del país elegido |
+| I1. Identidad | Registro con formulario por país, login, refresh, perfil, consentimientos, perfil de comercio | Flujo de cuenta en los 5 países | Un usuario se registra en CO y en JP con nombre, dirección y documento válidos |
+| I2. Pedido del cliente | Catálogo, carrito, cotización con desglose, pago con medios del país y propina según `tipMode` | Pedido creado desde la interfaz | El pedido llega a `SEARCHING_WORKER` en CO, BR, US, FR y JP |
+| I3. Trabajador y seguimiento | Disponibilidad, oferta con cuenta regresiva, aceptar, en camino con envío de ubicación, mapa del cliente con estados en vivo | Seguimiento en tiempo real | El cliente ve moverse al trabajador y cada cambio de estado llega sin recargar |
+| I4. Cierre del pedido | Confirmar, comprobante (vista e impresión), calificar en ambos sentidos, historial y ganancias del trabajador | Pedido de punta a punta | El pedido termina en `COMPLETED` con su comprobante en el idioma del país |
+| I5. Administración | Consola por región, verificación de usuarios, categorías y precios, perfil regional, tasas y reporte | Consola usable | La consola señala un servicio caído y el reporte muestra la tasa con su fecha |
+| I6. Pulido y evidencias | Textos largos (fr, pt), japonés, accesibilidad, Playwright con el pedido de prueba en los 5 países y capturas | Pruebas y capturas en `docs/evidencias` | Se cumple el criterio de terminado de F9 |
+
+Reglas de trabajo para el frontend:
+
+- **Ramas:** una rama por iteración (`frontend/i1-identidad`…) desde `avance-proyecto`, con pull request revisado por otra persona del equipo antes de unir.
+- **Definición de terminado de cada pantalla:**
+  - funciona contra el backend real;
+  - no tiene textos fijos en el código y sus textos existen en los 5 idiomas;
+  - se ve bien a 360 px y en escritorio, sin textos cortados en francés o portugués;
+  - los montos y las fechas se formatean con `Intl` y el perfil;
+  - los errores del backend se muestran traducidos;
+  - tiene al menos una prueba.
+- **Pseudo-localización:** un idioma de prueba que alarga los textos un 40 % ayuda a detectar cortes antes de traducir.
+- **Reparto sugerido:** una persona por rol (cliente y comercio, trabajador, administrador), más una persona responsable de la base (I0), las traducciones y Playwright.
+- **Seguimiento:** un tablero simple (GitHub Projects) con una tarjeta por pantalla y su iteración.
+
+#### Pantallas por rol
 
 | Rol | Pantallas |
 | --- | --- |
@@ -335,7 +427,7 @@ Una sola app Angular, móvil primero, con selector de país e idioma y una vista
 | Trabajador | Perfil y categorías, disponibilidad, oferta con cuenta regresiva, aceptar o rechazar, en camino (envía ubicación), iniciar y terminar, ganancias, calificar |
 | Administrador | Tablero por región, usuarios y verificación, categorías con traducciones y precios, perfiles regionales, impuestos, tasas de cambio, monitoreo, reporte de ingresos |
 
-- [ ] Terminado cuando el pedido de prueba se hace de punta a punta desde la interfaz en los 5 países, sin textos cortados en francés o portugués.
+- [ ] Terminado cuando el pedido de prueba se hace de punta a punta desde la interfaz en los 5 países, sin textos cortados en francés o portugués, y Playwright lo repite solo y deja las capturas en `docs/evidencias`.
 
 ### F10. Observabilidad y consola (P1 básico)
 
@@ -343,11 +435,26 @@ Una sola app Angular, móvil primero, con selector de país e idioma y una vista
 - Métricas: pedidos por estado y región, tiempo de asignación, fallas de pago, profundidad de colas y reintentos; un tablero de Grafana listo.
 - Endpoints de administración: tablero por región, salud de cada servicio y estado de las colas (API de gestión de RabbitMQ).
 
-- [ ] Terminado cuando la consola muestra el tablero por región y señala qué servicio está caído.
+- [ ] Terminado cuando la consola muestra el tablero por región y señala qué servicio está caído. En curso (`2c1366b`): API de consola, correlación, métricas y tablero de Grafana hechos; falta cerrar `scripts/demo-observabilidad.sh` en Docker y actualizar el README.
 
 ### F11. Pruebas y evidencias (P1)
 
-Se detallan en la sección siguiente.
+Se detallan en la sección siguiente. Base ya lista: `scripts/lib.sh` trae las funciones comunes (registrar, crear pedido, aceptar oferta, consultar la base y la API de RabbitMQ) y `evidence_start`/`evidence`/`evidence_end`, que dejan en `docs/evidencias/<script>.md` la fecha, la versión (commit), lo observado y el resultado.
+
+Scripts previstos, uno por prueba de falla, que corren solos contra el sistema en Docker:
+
+| Script | Prueba |
+| --- | --- |
+| `scripts/falla-pagos.sh` | Cae Pagos: `stop payments`, el pedido espera en `PENDING_PAYMENT`, `start` y se autoriza una sola vez |
+| `scripts/falla-replica-pagos.sh` | Dos réplicas de pagos (`--scale payments=2`), se detiene una a mitad del flujo |
+| `scripts/falla-nadie-acepta.sh` | El único trabajador rechaza: `AssignmentFailed`, anulación, `CANCELLED` y aviso (plazo de búsqueda bajado por variable) |
+| `scripts/falla-broker.sh` | `stop rabbitmq`: el pedido se crea igual, el evento queda en `event_publication` y sale al volver |
+| `scripts/falla-region.sh` | `stop core-br`: BR responde 503 en el gateway y CO sigue funcionando |
+| `scripts/falla-concurrencia.sh` | Dos pedidos simultáneos para el único trabajador: una sola reserva |
+| `scripts/falla-duplicado.sh` | Publica dos veces el mismo mensaje por la API de RabbitMQ: el inbox lo procesa una vez |
+| `scripts/prueba-localizacion.sh` | Pedido D4 en los 5 países con la hora fija (ver abajo) y salida en Markdown y CSV |
+
+Para la prueba de localización, la forma más confiable de fijar las 20:30 del 15/11/2026 sin romper la sesión (el token también depende del reloj) es una prueba automática del core con `Clock` fijo que use los 5 perfiles reales de la base, `PricingService`, los validadores y los formatos CLDR, y escriba el informe en `docs/evidencias`; el script la ejecuta. Las capturas del carrito y del comprobante en los 5 idiomas llegan con Playwright en F9.
 
 - [ ] Terminado cuando los scripts de falla y de localización corren sin intervención y dejan sus evidencias en `docs/evidencias`.
 
@@ -390,38 +497,84 @@ Por país, el script produce una fila con los 7 elementos de la sección 8: idio
 - Integración con Testcontainers (PostgreSQL + PostGIS, RabbitMQ, Redis): saga con camino feliz y compensaciones, idempotencia, concurrencia de reservas y seguridad por rol.
 - `ModularidadTest` en cada aplicación.
 
+## Qué falta y próximos pasos
+
+En orden. Cada paso cierra con pruebas en verde, README actualizado y su commit en `avance-proyecto`.
+
+1. **Cerrar F10:**
+   - correr `scripts/demo-observabilidad.sh` en Docker: el id de correlación en los logs de cada proceso, Prometheus leyendo los 5 cores y la consola señalando un servicio caído;
+   - documentar en el README las métricas, el tablero de Grafana y `/admin/console`.
+2. **F11, pruebas de falla y de localización:** los 8 scripts de la tabla de F11, cada uno con su evidencia en `docs/evidencias`. Incluye la prueba de localización con la hora fija y su salida en Markdown y CSV.
+3. **Confirmaciones del equipo,** necesarias antes de F9 y del informe:
+   - D1: un solo nombre de producto;
+   - D4: el pedido de prueba equivalente;
+   - D11: Angular, Transloco y Leaflet;
+   - los valores `VERIFICAR` de impuestos, festivos, precios de demostración, emisores ficticios por país y tasas de cambio simuladas, con su fuente oficial.
+4. **F9, frontend:** iteraciones I0 a I6 según la sección F9.
+5. **P2, si sobra tiempo,** en este orden por valor para la sustentación:
+   1. TLS de desarrollo en el gateway (certificado autofirmado en `infra/`).
+   2. Límite de intentos de login con Redis (`AUTH002`).
+   3. Caché del catálogo en Redis con TTL.
+   4. Sexto país solo con datos: Alemania, con una migración de perfil y sin tocar código.
+   5. RS256 con JWKS (D10): una clave por región y los subsistemas validando con la clave pública del emisor.
+   6. Carrito guardado (`DRAFT`).
+   7. Réplica de la base en una región.
+6. **Unir a `main`:** cuando F10 y F11 estén cerradas, abrir un pull request de `avance-proyecto` a `main` y revisarlo en equipo.
+7. **Informe:** pendientes fuera del código, según la sección de simplificaciones.
+   - Las 7 simplificaciones del prototipo frente a producción.
+   - IPv6, DNS y DHCP.
+   - Ubicación en OSI y TCP/IP, dispositivos y medios.
+   - Modelo de nube.
+   - 5 tipos de transparencia.
+   - Modelo de ingresos en las 5 monedas: el reporte de facturación da la base.
+   - Una segunda plataforma analizada.
+
+### Cómo retomar el trabajo
+
+- Rama: `avance-proyecto`.
+- Sistema completo:
+  ```bash
+  ./mvnw install -DskipTests
+  docker compose -f infra/docker-compose.yml up -d --build --wait
+  ```
+  Agregar `--profile full` levanta las 5 regiones.
+- Demostraciones en `scripts/`: `demo-mensajeria`, `demo-pagos`, `demo-asignacion`, `demo-notificaciones`, `demo-facturacion` y `demo-observabilidad`.
+- Credenciales de desarrollo: administrador por región `admin@{co,br,us,fr,jp}.jornal.test` / `Admin12345`; RabbitMQ `jornal` / `jornal-dev-password` (consola en el puerto 15673); Grafana `admin` / `admin`; Mailpit en el puerto 8025.
+- Si el volumen de RabbitMQ viene de antes de F4, `docker compose -f infra/docker-compose.yml down -v` lo recrea. Ojo: borra los datos de ese entorno.
+- Las pruebas leen el secreto JWT de la configuración, porque algunas máquinas tienen la variable `JWT_SECRET` definida.
+
 ## Trazabilidad con el enunciado
 
 Cada requisito del prototipo y de localización tiene una fase responsable; el diseño físico (6.5) se cubre en el informe, no en el código.
 
-| Requisito (sección) | Se cumple en |
-| --- | --- |
-| Cinco regiones en contenedores distintos (7.1) | F3 |
-| Una sola base de código parametrizada (7.2, 12) | F1, F3 |
-| Al menos 4 subsistemas por mensajes con middleware (7.3) | F3, F5 a F8 |
-| Flujo completo del pedido en cada país (7.4) | F4 a F9 |
-| Pruebas de falla y de localización (7.5, 7.6, 8) | F11 |
-| Repositorio con instrucciones y datos ficticios (7.7, 12) | F3 y README de cada fase |
-| Registro de los 4 actores con perfil regional (4.1) | F1, F2 |
-| Catálogo con precios por país y búsqueda por cercanía (4.2) | F1, F6 |
-| Carrito y pedido con moneda, impuesto y propina (4.3) | F4 |
-| Asignación por proximidad con balanceo de carga (4.4) | F6 |
-| Seguimiento en tiempo real (4.5) | F6, F7 |
-| Pago con medios del país y reembolso (4.6) | F5 |
-| Notificaciones en idioma y zona de cada actor (4.7) | F7 |
-| Comprobante del país (4.8) y calificaciones (4.9) | F8 |
-| Consola de administración (4.10) | F9, F10 |
-| UTF-8 en toda la cadena (4.1.1) | F3: codificación de bases, respuestas y mensajes |
-| Textos fuera del código con respaldo (4.1.2) | F1, F9 |
-| Formatos CLDR, dinero en enteros y tiempo en UTC (4.1.3 a 4.1.5) | D8, D9, F1, F4, F9 |
-| Servicio de tasas de cambio (4.1.6) | F8 |
-| Direcciones, teléfonos y orden del nombre (4.1.7) | F1 |
-| Tipografía CJK y textos largos (4.1.8) | F9 |
-| Datos personales por país, consentimiento y supresión (4.1.10) | Base por región (F3); consentimiento y borrado seguro ya existen |
-| Transparencia, fiabilidad, escalabilidad y manejo de fallas (5) | Gateway y nombres (F3), saga (F4), pruebas (F11) |
-| Rendimiento con caché (5) | P2: caché del catálogo en Redis con TTL |
-| Sexto país solo con configuración (5) | P2: demostración con Alemania |
-| Seguridad: autenticación, TLS, roles, abuso (5) | F2, gateway con TLS y límite de tasa (F3) |
+| Requisito (sección) | Se cumple en | Estado (24/11/2026) |
+| --- | --- | --- |
+| Cinco regiones en contenedores distintos (7.1) | F3 | Hecho |
+| Una sola base de código parametrizada (7.2, 12) | F1, F3 | Hecho |
+| Al menos 4 subsistemas por mensajes con middleware (7.3) | F3, F5 a F8 | Hecho: pagos, asignación, notificaciones y facturación |
+| Flujo completo del pedido en cada país (7.4) | F4 a F9 | Backend hecho por API; falta la interfaz (F9) |
+| Pruebas de falla y de localización (7.5, 7.6, 8) | F11 | Pendiente |
+| Repositorio con instrucciones y datos ficticios (7.7, 12) | F3 y README de cada fase | Hecho y al día hasta F8 |
+| Registro de los 4 actores con perfil regional (4.1) | F1, F2 | Hecho en la API |
+| Catálogo con precios por país y búsqueda por cercanía (4.2) | F1, F6 | Hecho |
+| Carrito y pedido con moneda, impuesto y propina (4.3) | F4 | Hecho |
+| Asignación por proximidad con balanceo de carga (4.4) | F6 | Hecho |
+| Seguimiento en tiempo real (4.5) | F6, F7 | Hecho (REST y WebSocket); falta el mapa (F9) |
+| Pago con medios del país y reembolso (4.6) | F5 | Hecho |
+| Notificaciones en idioma y zona de cada actor (4.7) | F7 | Hecho |
+| Comprobante del país (4.8) y calificaciones (4.9) | F8 | Hecho |
+| Consola de administración (4.10) | F9, F10 | API en curso (F10); falta la interfaz (F9) |
+| UTF-8 en toda la cadena (4.1.1) | F3: codificación de bases, respuestas y mensajes | Hecho |
+| Textos fuera del código con respaldo (4.1.2) | F1, F9 | Hecho en el backend (errores, avisos y comprobantes en 5 idiomas) |
+| Formatos CLDR, dinero en enteros y tiempo en UTC (4.1.3 a 4.1.5) | D8, D9, F1, F4, F9 | Hecho en el backend |
+| Servicio de tasas de cambio (4.1.6) | F8 | Hecho (proveedor simulado y carga manual) |
+| Direcciones, teléfonos y orden del nombre (4.1.7) | F1 | Hecho |
+| Tipografía CJK y textos largos (4.1.8) | F9 | Pendiente (F9) |
+| Datos personales por país, consentimiento y supresión (4.1.10) | Base por región (F3); consentimiento y borrado seguro ya existen | Hecho; el contacto solo se consulta al core del país |
+| Transparencia, fiabilidad, escalabilidad y manejo de fallas (5) | Gateway y nombres (F3), saga (F4), pruebas (F11) | Hecho en el diseño; faltan las evidencias (F11) |
+| Rendimiento con caché (5) | P2: caché del catálogo en Redis con TTL | Pendiente (P2) |
+| Sexto país solo con configuración (5) | P2: demostración con Alemania | Pendiente (P2) |
+| Seguridad: autenticación, TLS, roles, abuso (5) | F2, gateway con TLS y límite de tasa (F3) | Roles, JWT y límite de tasa hechos; falta TLS y el límite de intentos de login (P2) |
 
 ## Simplificaciones que se declaran en el informe
 
