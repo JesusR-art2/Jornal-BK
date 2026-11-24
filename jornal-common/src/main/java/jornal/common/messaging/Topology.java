@@ -12,9 +12,9 @@ import java.util.Map;
  * existen aunque el consumidor esté caído y los mensajes esperan en ellas.
  *
  * <ul>
- *   <li>Exchange topic durable {@code jornal.events}.</li>
- *   <li>Una cola durable por subsistema y región ({@code payments.co}, {@code payments.br}...), para que el atraso
- *       de un país no frene a los demás. Se enlaza con {@code <región>.#}.</li>
+ *   <li>Exchange topic durable {@code jornal.events}; clave {@code <región>.<type>}.</li>
+ *   <li>Una cola durable por consumidor y región ({@code payments.co}, {@code core.co}...), para que el atraso
+ *       de un país no frene a los demás. Cada consumidor se enlaza solo a los prefijos que le interesan.</li>
  *   <li>Mensajes rechazados tras los reintentos van a {@code jornal.dead-letter}.</li>
  * </ul>
  */
@@ -23,17 +23,26 @@ public final class Topology {
     public static final String EXCHANGE = "jornal.events";
     public static final String DEAD_LETTER_EXCHANGE = "jornal.events.dlx";
     public static final String DEAD_LETTER_QUEUE = "jornal.dead-letter";
+    public static final String CORE = "core";
     public static final List<String> SUBSYSTEMS = List.of("payments", "dispatch", "notifications", "billing");
+
+    /** Prefijos de tipo que consume cada proceso (sin región). "#" = todo. */
+    private static final Map<String, List<String>> SUBSCRIPTIONS = Map.of(
+            CORE, List.of("jornal.payment.#", "jornal.dispatch.#", "jornal.billing.#"),
+            "payments", List.of("jornal.request.#", "jornal.region.#"),
+            "dispatch", List.of("jornal.request.#", "jornal.region.#", "jornal.worker.#"),
+            "notifications", List.of("#"),
+            "billing", List.of("jornal.payment.#", "jornal.region.#"));
 
     private Topology() {
     }
 
-    public static String queue(String subsystem, String region) {
-        return subsystem + "." + region.toLowerCase(Locale.ROOT);
+    public static String queue(String consumer, String region) {
+        return consumer + "." + region.toLowerCase(Locale.ROOT);
     }
 
-    public static List<String> queuesOf(String subsystem, List<String> regions) {
-        return regions.stream().map(r -> queue(subsystem, r)).toList();
+    public static List<String> queuesOf(String consumer, List<String> regions) {
+        return regions.stream().map(r -> queue(consumer, r)).toList();
     }
 
     public static Declarables declarables(List<String> regions) {
@@ -46,15 +55,18 @@ public final class Topology {
         all.add(deadLetters);
         all.add(BindingBuilder.bind(deadLetters).to(dlx));
 
-        for (String subsystem : SUBSYSTEMS) {
+        SUBSCRIPTIONS.forEach((consumer, patterns) -> {
             for (String region : regions) {
-                Queue queue = QueueBuilder.durable(queue(subsystem, region))
+                Queue queue = QueueBuilder.durable(queue(consumer, region))
                         .withArguments(Map.of("x-dead-letter-exchange", DEAD_LETTER_EXCHANGE))
                         .build();
                 all.add(queue);
-                all.add(BindingBuilder.bind(queue).to(events).with(region.toLowerCase(Locale.ROOT) + ".#"));
+                String prefix = region.toLowerCase(Locale.ROOT) + ".";
+                for (String pattern : patterns) {
+                    all.add(BindingBuilder.bind(queue).to(events).with(prefix + pattern));
+                }
             }
-        }
+        });
         return new Declarables(all);
     }
 }

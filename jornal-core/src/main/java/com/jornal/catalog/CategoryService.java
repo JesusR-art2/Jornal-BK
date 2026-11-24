@@ -107,6 +107,22 @@ public class CategoryService implements CatalogApi {
                 .toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<CategoryPriceSummary> priceOf(UUID categoryId) {
+        RegionProfileView profile = regionApi.current();
+        return repository.findById(categoryId)
+                .filter(Category::isActive)
+                .flatMap(c -> priceRepository.findByCategoryIdAndRegionCode(c.getId(), profile.code())
+                        .map(p -> {
+                            CategoryTranslation t = bestTranslations(List.of(c.getId()), localeChain(profile))
+                                    .get(c.getId());
+                            return new CategoryPriceSummary(c.getId(), c.getSlug(),
+                                    t != null ? t.getName() : c.getName(),
+                                    p.getUnit(), p.getPriceMinor(), p.getCurrency());
+                        }));
+    }
+
     @Transactional
     public void upsertTranslation(UUID categoryId, String locale, TranslationRequest req) {
         if (!Locales.isSupported(locale)) {

@@ -3,7 +3,7 @@
 Plataforma tipo Uber para que personas, tiendas o empresas soliciten un ayudante o trabajador para una tarea puntual, sin contrato formal (trabajo informal por jornal). El backend está pensado como un **monolito modular** que pueda evolucionar a un sistema distribuido.
 
 > **Estado:** MVP en desarrollo. Última actualización: 24 de noviembre de 2026.
-> Existen la infraestructura, la seguridad con JWT y los módulos `region`, `users`, `catalog` y `workers`. El plan por fases para llevarlo a sistema distribuido está en [`documento.md`](documento.md) y el estado de partida en [`docs/ESTADO-ACTUAL.md`](docs/ESTADO-ACTUAL.md). Fases cerradas: **F0 (correcciones)**, **F1 (perfil regional y localización)** , **F2 P1 (sesión segura)** y **F3 (procesos, regiones e infraestructura)**.
+> Existen la infraestructura, la seguridad con JWT y los módulos `region`, `users`, `catalog` y `workers`. El plan por fases para llevarlo a sistema distribuido está en [`documento.md`](documento.md) y el estado de partida en [`docs/ESTADO-ACTUAL.md`](docs/ESTADO-ACTUAL.md). Fases cerradas: **F0 (correcciones)**, **F1 (perfil regional y localización)** , **F2 P1 (sesión segura)** , **F3 (procesos, regiones e infraestructura)** y **F4 (pedidos y saga)**.
 
 ---
 
@@ -351,6 +351,38 @@ Si la cuenta deja de ser elegible (desverificada, desactivada o eliminada), `Wor
 
 ---
 
+### Requests (pedidos y saga)
+
+| Método y ruta | Acceso | Descripción |
+|---|---|---|
+| `POST /requests/quote` | APPLICANT, BUSINESS | Cotiza el carrito sin guardar: líneas (servicio, desplazamiento, impuesto, propina), totales en unidad menor, `tipMode` y propinas sugeridas del país |
+| `POST /requests` | APPLICANT, BUSINESS | Crea el pedido en `PENDING_PAYMENT`. Exige `Idempotency-Key`; repetirla devuelve el mismo pedido (200) |
+| `GET /requests?status=` | autenticado | Propios: como cliente, los pedidos; como trabajador, los asignados |
+| `GET /requests/{id}` y `/history` | cliente, trabajador asignado o ADMIN | Detalle e historial de estados (origen, destino, instante UTC, actor, motivo) |
+| `PATCH /requests/{id}` | cliente | Antes de la asignación: recotiza (unidades, fecha, propina), sube `paymentAttempt` y vuelve a `PENDING_PAYMENT` |
+| `POST /requests/{id}/cancel` | cliente (hasta `ASSIGNED`) o ADMIN (incidencias) | Cancela con compensación de pago |
+| `POST /requests/{id}/en-route`, `/start`, `/finish` | WORKER asignado | `ASSIGNED → EN_ROUTE → IN_PROGRESS → PENDING_CONFIRMATION` |
+| `POST /requests/{id}/confirm` | cliente | Pide la captura del pago; se confirma solo a las 24 h (`REQUESTS_AUTO_CONFIRM_AFTER`) |
+| `GET /admin/requests?status=` | ADMIN | Todos los pedidos de la región |
+
+Cuerpo de cotizar y crear (`RequestDraft`): `categoryId`, `units` (1 a 30), `scheduledLocal` (`2026-11-15T20:30`) y `timezone` (una zona permitida del país; por defecto la del perfil), `address` (campos del país), `latitude`, `longitude`, `paymentMethod` (del perfil), `tipMinor` o `tipPercent`, `notes`. La hora se guarda en UTC con la zona IANA del lugar; el lugar, además, como punto PostGIS.
+
+**Precio** (`PricingService`, todo en enteros): subtotal = precio × unidades; más desplazamiento del perfil; impuesto sobre ambos (si está incluido en el precio se informa y no se suma); propina según `tipMode` (`HIDDEN` no admite propina).
+
+**Saga** (`RequestSaga`, cola `core.<región>`), con los mensajes en el Outbox:
+
+| El core recibe | Paso | El core emite |
+|---|---|---|
+| (creación) | → `PENDING_PAYMENT` | `jornal.request.created.v1` (pagos) |
+| `jornal.payment.authorized.v1` | `PENDING_PAYMENT → SEARCHING_WORKER` | `jornal.request.assignment-requested.v1` (asignación) |
+| `jornal.payment.failed.v1` | `PENDING_PAYMENT → CANCELLED` | — |
+| `jornal.dispatch.worker-assigned.v1` | `SEARCHING_WORKER → ASSIGNED` | — |
+| `jornal.dispatch.assignment-failed.v1` | `SEARCHING_WORKER → CANCELLED` | `jornal.request.cancelled.v1` (pagos anula o reembolsa) |
+| (confirmación) | `PENDING_CONFIRMATION` | `jornal.request.capture-requested.v1` (pagos) |
+| `jornal.payment.captured.v1` + `jornal.billing.receipt-issued.v1` | `→ COMPLETED` | — |
+
+Cada cambio emite además `jornal.request.status-changed.v1` (notificaciones). Las respuestas de un intento de pago viejo, tardías o duplicadas se ignoran. Plazos (`RequestTimeouts`, una sola instancia con ShedLock): sin respuesta de pagos en 2 min → `CANCELLED`; la hora pasa sin trabajador → `EXPIRED` con compensación; sin confirmación en 24 h → se confirma solo. Concurrencia: versión optimista (`@Version`); un choque devuelve 409 `CONCURRENT_UPDATE` en la API y se reintenta en los mensajes.
+
 ## Migraciones
 
 | Versión | Contenido |
@@ -369,8 +401,9 @@ Si la cuenta deja de ser elegible (desverificada, desactivada o eliminada), `Wor
 | `V12__users_names_addresses_business` | `given_name` y `family_name`; `addresses` y `address_fields`; `business_profiles`; sin defaults de país en `users` |
 | `V13__refresh_tokens` | `refresh_tokens` (hash, familia, vencimiento, revocación y reemplazo) |
 | `V14__event_publication` | Outbox: tabla `event_publication` de Spring Modulith (esquema v2) |
+| `V15__requests` | `service_requests` (con punto PostGIS generado), `request_lines`, `request_status_history`, `inbox` del core y `shedlock` |
 
-La siguiente migración libre del core es `V15`. Los subsistemas usan `jornal-common/.../db/subsystem` (V1: `inbox` y `region_profile_cache`); sus migraciones propias empezarán en `V100`.
+La siguiente migración libre del core es `V16`. Los subsistemas usan `jornal-common/.../db/subsystem` (V1: `inbox` y `region_profile_cache`); sus migraciones propias empezarán en `V100`.
 
 ## Mensajería entre procesos
 
@@ -379,7 +412,8 @@ La siguiente migración libre del core es `V15`. Los subsistemas usan `jornal-co
 - Sobre **CloudEvents 1.0** (JSON): `specversion`, `id`, `source` (`jornal-core-co`), `type`, `time` (UTC), `subject`, `region`, `correlationid`, `aggregateversion`, `data`.
 - **Outbox**: el core publica `CloudEvent` como evento interno; Spring Modulith lo guarda en `event_publication` en la misma transacción del cambio y lo envía a RabbitMQ después del commit. Si RabbitMQ está caído, `OutboxResubmitter` lo reintenta cada 30 s.
 - **Inbox**: cada subsistema registra el `id` de cada mensaje en `inbox` y descarta duplicados. Los handlers (`CloudEventHandler`) corren en la misma transacción. Tres reintentos con espera creciente; después, a `jornal.dead-letter`.
-- Evento disponible hoy: `jornal.region.profile-updated.v1` (los subsistemas guardan el perfil y solo aplican versiones más nuevas).
+- Cada consumidor se enlaza solo a lo que le interesa: `core.<r>` a `jornal.payment.#`, `jornal.dispatch.#` y `jornal.billing.#`; `payments.<r>` a `jornal.request.#` y `jornal.region.#`; `dispatch.<r>` a `jornal.request.#`, `jornal.region.#` y `jornal.worker.#`; `billing.<r>` a `jornal.payment.#` y `jornal.region.#`; `notifications.<r>` a todo. Los tipos están en `jornal.common.events.EventTypes`.
+- Si tu RabbitMQ de Docker es anterior a F4, sus colas conservan el enlace viejo `<región>.#`: bórralo desde la consola o reinicia con `docker compose -f infra/docker-compose.yml down -v`.
 
 ---
 
@@ -430,7 +464,8 @@ La siguiente migración libre del core es `V15`. Los subsistemas usan `jornal-co
 **Verificado con Docker (24/11/2026)**
 - [x] **F2 (P1)**: access token de 15 minutos con claim `region` validado, refresh tokens con rotación, detección de reuso y revocación (logout, cambio de contraseña, bloqueo y borrado), CORS y Swagger con Bearer
 - [x] **F3**: Maven multimódulo, `jornal-common`, 4 subsistemas como procesos independientes, RabbitMQ con Outbox, CloudEvents e inbox, Dockerfile multietapa y `infra/docker-compose.yml` con 5 cores, gateway, Mailpit, Prometheus y Grafana
-- [x] 67 pruebas en verde (65 del core y 2 de pagos), con PostgreSQL y RabbitMQ reales
+- [x] **F4**: módulo `requests` con carrito (cotizar), pedido idempotente, precios por perfil, máquina de estados con historial, saga orquestada con compensaciones, plazos con ShedLock y cola `core.<región>` con inbox
+- [x] 77 pruebas en verde (75 del core y 2 de pagos), con PostgreSQL y RabbitMQ reales; la saga se prueba con los subsistemas simulados (camino feliz, pago fallido, sin trabajador, recotización, cancelación y vencimiento)
 - [x] Sistema completo verificado con Docker (24/11/2026): las 5 regiones sanas detrás del gateway y `scripts/demo-mensajeria.sh` en verde (el cambio de perfil llega a pagos y el reenvío se procesa una vez)
 
 **Pendiente de confirmar por el equipo**

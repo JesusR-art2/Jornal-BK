@@ -64,6 +64,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem;
     }
 
+    /** Dos cambios simultáneos sobre el mismo registro (versión optimista): el cliente puede reintentar. */
+    @ExceptionHandler(org.springframework.dao.OptimisticLockingFailureException.class)
+    public ProblemDetail handleConcurrentUpdate(Exception ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                translate("CONCURRENT_UPDATE", null, "The record was changed at the same time, try again"));
+        problem.setProperty("code", "CONCURRENT_UPDATE");
+        return problem;
+    }
+
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpected(Exception ex) {
         log.error("Unexpected error", ex);

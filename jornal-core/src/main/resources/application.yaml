@@ -20,7 +20,20 @@ jornal:
     given-name: ${ADMIN_GIVEN_NAME:Admin}
     family-name: ${ADMIN_FAMILY_NAME:Jornal}
     locale: ${ADMIN_LOCALE:}
+  requests:
+    payment-timeout: ${REQUESTS_PAYMENT_TIMEOUT:2m}          # sin respuesta de pagos: se cancela
+    auto-confirm-after: ${REQUESTS_AUTO_CONFIRM_AFTER:24h}   # 2m en demostración
+    check-every: 30s
 spring:
+  rabbitmq:
+    listener:
+      simple:
+        default-requeue-rejected: false   # agotados los reintentos, a la cola de mensajes muertos
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1s
+          multiplier: 2
   application:
     name: jornal
   profiles:
