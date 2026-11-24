@@ -37,6 +37,7 @@ x-core-env: &core-env
   SPRINGDOC_API_DOCS_ENABLED: "true"
   SPRINGDOC_SWAGGER_UI_ENABLED: "true"
   SERVER_FORWARD_HEADERS_STRATEGY: framework
+  INTERNAL_TOKEN: ${INTERNAL_TOKEN:-docker-dev-only-internal-token}
 
 x-core: &core
   <<: *app
@@ -126,6 +127,10 @@ services:
     environment:
       <<: *subsystem-env
       DB_URL: jdbc:postgresql://postgres:5432/jornal_notifications
+      MAIL_HOST: mailpit
+      MAIL_PORT: "1025"
+      CORE_URL_TEMPLATE: http://core-{region}:8080   # el contacto se pide al core de la región
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-docker-dev-only-internal-token}
 
   billing:
     <<: *app

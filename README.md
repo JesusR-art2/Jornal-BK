@@ -3,7 +3,7 @@
 Plataforma tipo Uber para que personas, tiendas o empresas soliciten un ayudante o trabajador para una tarea puntual, sin contrato formal (trabajo informal por jornal). El backend está pensado como un **monolito modular** que pueda evolucionar a un sistema distribuido.
 
 > **Estado:** MVP en desarrollo. Última actualización: 24 de noviembre de 2026.
-> Existen la infraestructura, la seguridad con JWT y los módulos `region`, `users`, `catalog` y `workers`. El plan por fases para llevarlo a sistema distribuido está en [`documento.md`](documento.md) y el estado de partida en [`docs/ESTADO-ACTUAL.md`](docs/ESTADO-ACTUAL.md). Fases cerradas: **F0 (correcciones)**, **F1 (perfil regional y localización)**, **F2 P1 (sesión segura)**, **F3 (procesos, regiones e infraestructura)**, **F4 (pedidos y saga)**, **F5 (pagos)** y **F6 (asignación y seguimiento)**.
+> Existen la infraestructura, la seguridad con JWT y los módulos `region`, `users`, `catalog` y `workers`. El plan por fases para llevarlo a sistema distribuido está en [`documento.md`](documento.md) y el estado de partida en [`docs/ESTADO-ACTUAL.md`](docs/ESTADO-ACTUAL.md). Fases cerradas: **F0 (correcciones)**, **F1 (perfil regional y localización)**, **F2 P1 (sesión segura)**, **F3 (procesos, regiones e infraestructura)**, **F4 (pedidos y saga)**, **F5 (pagos)**, **F6 (asignación y seguimiento)** y **F7 (notificaciones y tiempo real)**.
 
 ---
 
@@ -94,6 +94,7 @@ docker compose -f infra/docker-compose.yml --profile full up -d --build --wait  
 scripts/demo-mensajeria.sh co                                                    # demostración del flujo de mensajes
 scripts/demo-pagos.sh                                                            # pedido real: autoriza, anula y rechazo simulado
 scripts/demo-asignacion.sh                                                       # pedido real: oferta, aceptación, seguimiento y captura
+scripts/demo-notificaciones.sh                                                   # avisos en el idioma de cada persona y correos en Mailpit
 docker compose -f infra/docker-compose.yml --profile full down                   # apagar (conserva datos)
 ```
 
@@ -103,7 +104,8 @@ docker compose -f infra/docker-compose.yml --profile full down                  
 | Estado de un subsistema | `http://localhost:8000/subsystems/payments/status` (también dispatch, notifications, billing) |
 | Swagger de una región | `http://localhost:8000/api/co/swagger-ui.html` |
 | RabbitMQ (consola) | `http://localhost:15673` (jornal / jornal-dev-password) |
-| Mailpit | `http://localhost:8025` |
+| Mailpit (correos de los avisos) | `http://localhost:8025` |
+| WebSocket de avisos (STOMP) | `ws://localhost:8000/subsystems/notifications/ws` (JWT en el CONNECT) |
 | Prometheus / Grafana | `http://localhost:9090` / `http://localhost:3000` (admin / admin) |
 | PostgreSQL | `localhost:55432` (bases `jornal_co` ... `jornal_jp` y una por subsistema) |
 
@@ -403,6 +405,22 @@ Consume `jornal.worker.updated.v1` (foto del trabajador que publica el core al c
 | `PUT /locations/me` | WORKER | `{"latitude", "longitude"}`: posición en vivo |
 | `GET /tracking/{requestId}` | cliente o trabajador del pedido | Estado, posición del trabajador y distancia al lugar |
 
+### Notifications (subsistema `jornal-notifications`): avisos y tiempo real
+
+Consume `jornal.request.status-changed.v1` (cliente y trabajador del pedido) y `jornal.dispatch.offer-created.v1` (trabajador), y reenvía la posición en vivo de `jornal.live`.
+
+- **Contacto**: correo, teléfono, idioma y zona se piden al core de la región (`GET /internal/contacts/{id}` con el header `X-Internal-Token`, 3 intentos con espera creciente). El dato personal no se copia al subsistema. Si el core no responde, el mensaje se reintenta y después va a `jornal.dead-letter`. El gateway responde 404 a `/internal/**`.
+- **Plantillas** (`templates/notifications_<idioma>.properties`): ICU MessageFormat con plurales CLDR (`{seconds, plural, one {# segundo} other {# segundos}}`) y números del idioma; la hora se escribe en la zona del destinatario (`jue, 26 nov 2026, 8:00 a. m. COT`). Clave `<plantilla>.<audiencia>.title|body`; si una audiencia no tiene plantilla, no se le avisa. Respaldo: inglés.
+- **Canales**: en la app (WebSocket y bandeja), push simulado y correo (Mailpit) siempre; SMS simulado solo en avisos urgentes (oferta, asignado, en camino). Cada entrega queda en `notifications` una vez por evento, destinatario y canal (`SENT`, `FAILED` o `SKIPPED`).
+- **WebSocket STOMP** en `/ws`: el JWT del core va en el header `Authorization` del CONNECT. Temas: `/topic/users.<id>` (solo el propio usuario) y `/topic/requests.<id>` (estado y posición en vivo, solo el cliente y el trabajador del pedido). Los clientes no pueden enviar mensajes.
+
+| Ruta (gateway: `/subsystems/notifications/...`) | Acceso | Descripción |
+|---|---|---|
+| `GET /notifications/me?limit=20` | usuario autenticado | Bandeja de avisos, el más reciente primero |
+| `POST /notifications/{id}/read` | dueño del aviso | Marca un aviso como leído |
+| `GET /deliveries?requestId=` | interna (demostración) | Entregas del pedido por canal y estado, sin correo ni teléfono |
+| `ws: /ws` | JWT en el CONNECT | WebSocket STOMP |
+
 ### Payments (subsistema `jornal-payments`)
 
 Consume `jornal.request.created/repriced/capture-requested/cancelled` de la cola `payments.<región>` y responde con `jornal.payment.*` por su outbox. El flujo lo elige el medio de pago del perfil regional:
@@ -451,7 +469,7 @@ Los vouchers se dan por pagados solos a los 10 s y vencen a los 90 s, por debajo
 | `V15__requests` | `service_requests` (con punto PostGIS generado), `request_lines`, `request_status_history`, `inbox` del core y `shedlock` |
 | `V16__worker_base_location` | Ubicación base del trabajador (`base_latitude`, `base_longitude`) |
 
-La siguiente migración libre del core es `V17`. Los subsistemas usan `jornal-common/.../db/subsystem` (V1: `inbox` y `region_profile_cache`); sus migraciones propias empezarán en `V100`.
+La siguiente migración libre del core es `V17`. Los subsistemas usan `jornal-common/.../db/subsystem` (V1: `inbox` y `region_profile_cache`; V2: `outbox`) y sus migraciones propias empiezan en `V100` (pagos, asignación y notificaciones).
 
 ## Mensajería entre procesos
 
@@ -515,7 +533,9 @@ La siguiente migración libre del core es `V17`. Los subsistemas usan `jornal-co
 - [x] **F4**: módulo `requests` con carrito (cotizar), pedido idempotente, precios por perfil, máquina de estados con historial, saga orquestada con compensaciones, plazos con ShedLock y cola `core.<región>` con inbox
 - [x] **F5**: subsistema de pagos con interfaz `PaymentGateway` y adaptadores simulados por flujo (autorizar y capturar, cobrar y reembolsar, voucher asíncrono), idempotencia por pedido e intento, libro de movimientos con liquidación, tablas particionadas por región, simulador configurable en caliente y outbox de subsistemas
 - [x] **F6**: subsistema de asignación con proyección de trabajadores (`jornal.worker.updated.v1`), candidatos por categoría, radio y disponibilidad ordenados por distancia, carga del día y calificación, ofertas secuenciales con plazo, reserva atómica, posición en vivo en Redis GEO con TTL por el exchange no durable `jornal.live` y seguimiento para el cliente
-- [x] 92 pruebas en verde (75 del core, 9 de pagos y 8 de asignación), con PostgreSQL, RabbitMQ y Redis reales
+- [x] **F7**: subsistema de notificaciones con plantillas ICU MessageFormat en 5 idiomas (plurales CLDR) y la hora en la zona del destinatario; contacto pedido por REST al core de la región con reintento (`/internal/contacts`, token interno, cerrado en el gateway); avisos en la app por WebSocket STOMP (JWT en el CONNECT y permiso por tema), bandeja `/notifications/me`, correo a Mailpit, y SMS y push simulados; posición en vivo reenviada al tema del pedido
+- [x] 103 pruebas en verde (76 del core, 9 de pagos, 8 de asignación y 10 de notificaciones), con PostgreSQL, RabbitMQ y Redis reales
+- [x] Verificado en Docker (24/11/2026): `scripts/demo-notificaciones.sh` (pedido completo: el cliente recibe 6 avisos en español y el trabajador 5 en inglés, en la app y por correo en Mailpit)
 - [x] Verificado en Docker (24/11/2026): `scripts/demo-asignacion.sh` (pedido real ofrecido al trabajador a 1,3 km, aceptado, seguido en vivo hasta 0,2 km y capturado)
 - [x] Verificado en Docker (24/11/2026): `scripts/demo-pagos.sh` (un pedido real se autoriza, se anula al cancelarlo y se rechaza con el simulador) y `scripts/demo-mensajeria.sh`
 - [x] Sistema completo verificado con Docker (24/11/2026): las 5 regiones sanas detrás del gateway y `scripts/demo-mensajeria.sh` en verde (el cambio de perfil llega a pagos y el reenvío se procesa una vez)
@@ -531,7 +551,6 @@ El orden y los criterios de terminado están en [`documento.md`](documento.md):
 
 - **F2 (P2)** RS256 con JWKS y límite de intentos de login con Redis
 - **F3 (pendiente menor)** TLS de desarrollo en el gateway (hoy HTTP en el puerto 8000)
-- **F4** pedidos y saga · **F5** pagos · **F6** asignación y seguimiento · **F7** notificaciones
 - **F8** facturación y calificaciones · **F9** frontend · **F10** observabilidad · **F11** pruebas de falla y de localización
 
 ---

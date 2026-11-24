@@ -119,6 +119,28 @@ class AuthFlowIntegrationTest {
                 .andExpect(jsonPath("$.size").value(5));
     }
 
+    /** F7: notificaciones pide el contacto al core con el token interno; sin él, nada. */
+    @Test
+    void internalContactNeedsTheInternalToken() throws Exception {
+        String email = register();
+        String access = "Bearer " + login(email, "Clave12345").get("accessToken").asString();
+        String userId = json.readTree(mvc.perform(get("/users/me").header("Authorization", access))
+                .andReturn().getResponse().getContentAsString()).get("id").asString();
+
+        mvc.perform(get("/internal/contacts/{id}", userId)).andExpect(status().isUnauthorized());
+        mvc.perform(get("/internal/contacts/{id}", userId).header("Authorization", access)
+                        .header("X-Internal-Token", "wrong"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/internal/contacts/{id}", userId).header("X-Internal-Token", "dev-only-internal-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value(email))
+                .andExpect(jsonPath("$.locale").value("es-CO"))
+                .andExpect(jsonPath("$.timezone").value("America/Bogota"))
+                .andExpect(jsonPath("$.active").value(true));
+        mvc.perform(get("/internal/contacts/{id}", UUID.randomUUID()).header("X-Internal-Token", "dev-only-internal-token"))
+                .andExpect(status().isNotFound());
+    }
+
     // ------------------------------------------------------------------ utilidades
 
     private String register() throws Exception {

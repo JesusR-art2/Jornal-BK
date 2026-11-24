@@ -58,6 +58,7 @@ class SecurityRolesTest {
     @MockitoBean AddressService addressService;
     @MockitoBean BusinessService businessService;
     @MockitoBean com.jornal.requests.services.RequestService requestService;
+    @MockitoBean com.jornal.users.UserRepository userRepository;
 
     @Autowired JwtEncoder jwtEncoder;
     @Autowired JwtProperties jwtProperties;
