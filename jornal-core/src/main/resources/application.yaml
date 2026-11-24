@@ -1,0 +1,42 @@
+jornal:
+  region:
+    # País que atiende esta instancia. Debe existir en region_profiles.
+    code: ${APP_REGION:CO}
+  security:
+    jwt:
+      issuer: jornal
+      expiration-minutes: 15        # access token corto; se renueva con POST /auth/refresh
+    refresh:
+      ttl: 30d
+  cors:
+    # Orígenes del frontend (lista separada por comas). Admite patrones con *.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200,https://*.jornal.localhost}
+  messaging:
+    # Regiones con colas en RabbitMQ (minúsculas). La topología se declara en todos los procesos.
+    regions: ${MESSAGING_REGIONS:co,br,us,fr,jp}
+  admin:
+    email: ${ADMIN_EMAIL:}
+    password: ${ADMIN_PASSWORD:}
+    given-name: ${ADMIN_GIVEN_NAME:Admin}
+    family-name: ${ADMIN_FAMILY_NAME:Jornal}
+    locale: ${ADMIN_LOCALE:}
+spring:
+  application:
+    name: jornal
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  messages:
+    basename: messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  modulith:
+    events:
+      # Outbox: event_publication se crea con Flyway (V14), no con la inicialización de Modulith.
+      jdbc:
+        schema-initialization:
+          enabled: false
+      republish-outstanding-events-on-restart: true

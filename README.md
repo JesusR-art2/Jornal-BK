@@ -3,7 +3,7 @@
 Plataforma tipo Uber para que personas, tiendas o empresas soliciten un ayudante o trabajador para una tarea puntual, sin contrato formal (trabajo informal por jornal). El backend está pensado como un **monolito modular** que pueda evolucionar a un sistema distribuido.
 
 > **Estado:** MVP en desarrollo. Última actualización: 24 de noviembre de 2026.
-> Existen la infraestructura, la seguridad con JWT y los módulos `region`, `users`, `catalog` y `workers`. El plan por fases para llevarlo a sistema distribuido está en [`documento.md`](documento.md) y el estado de partida en [`docs/ESTADO-ACTUAL.md`](docs/ESTADO-ACTUAL.md). Fases cerradas: **F0 (correcciones)**, **F1 (perfil regional y localización)** y **F2 P1 (sesión segura)**.
+> Existen la infraestructura, la seguridad con JWT y los módulos `region`, `users`, `catalog` y `workers`. El plan por fases para llevarlo a sistema distribuido está en [`documento.md`](documento.md) y el estado de partida en [`docs/ESTADO-ACTUAL.md`](docs/ESTADO-ACTUAL.md). Fases cerradas: **F0 (correcciones)**, **F1 (perfil regional y localización)** , **F2 P1 (sesión segura)** y **F3 (procesos, regiones e infraestructura)**.
 
 ---
 
@@ -36,11 +36,13 @@ Plataforma tipo Uber para que personas, tiendas o empresas soliciten un ayudante
 | Migraciones | Flyway |
 | Seguridad | Spring Security + OAuth2 Resource Server, JWT firmado con HS256 |
 | Mapeo de objetos | MapStruct + Lombok |
-| Modularidad | Spring Modulith 2.1.1 (`starter-core` y `starter-test`) |
+| Modularidad | Maven multimódulo + Spring Modulith 2.1.1 dentro del core |
+| Mensajería | RabbitMQ 4 (AMQP), Outbox con el registro de eventos de Spring Modulith (`starter-jdbc` + `events-amqp`), sobre CloudEvents 1.0, inbox en los consumidores |
+| Gateway | Nginx (enrutamiento por región, límite de tasa, id de correlación) |
 | Documentación API | springdoc-openapi (Swagger UI) |
 | Observabilidad | Actuator + Micrometer (Prometheus) |
-| Pruebas | Spring Boot Test, Testcontainers (dependencias listas, pruebas pendientes) |
-| Entorno local | Docker Compose integrado con Spring Boot |
+| Pruebas | Spring Boot Test, Testcontainers (PostgreSQL + PostGIS, RabbitMQ, Redis) |
+| Entorno local | Docker Compose integrado con Spring Boot (desarrollo) y `infra/docker-compose.yml` (sistema completo) |
 
 ---
 
@@ -71,17 +73,39 @@ REDIS_PORT=6379
 - Usa solo letras y números en las claves (evita `ñ`, tildes y `$`).
 - Si ya tienes un PostgreSQL instalado en tu máquina usando el 5432, cambia `POSTGRES_PORT` (por ejemplo a `5433`). Spring Boot toma el puerto publicado desde Docker Compose, no hay que tocar nada más.
 
-### 2. Levantar la aplicación
+### 2. Levantar el core en desarrollo
 
-Con Docker Desktop abierto:
+El proyecto es **multimódulo**: la API regional está en `jornal-core`. Con Docker Desktop abierto:
 
 ```bash
-./mvnw spring-boot:run
+./mvnw install -DskipTests            # la primera vez y cuando cambie jornal-common
+./mvnw -pl jornal-core spring-boot:run
 ```
 
-En Windows: `mvnw.cmd spring-boot:run`, o ejecuta `JornalBackendApplication` desde IntelliJ con el perfil `dev`.
+En Windows: `mvnw.cmd ...`, o ejecuta `JornalBackendApplication` desde IntelliJ (módulo `jornal-core`, perfil `dev`, directorio de trabajo `jornal-core`).
 
-Spring Boot ejecuta `docker compose up` por ti, espera a que PostgreSQL y Redis estén sanos, configura las conexiones y Flyway aplica las migraciones. La primera vez tarda más porque descarga las imágenes. En `dev` no necesitas levantar los contenedores a mano ni configurar el datasource.
+Spring Boot ejecuta `docker compose up` con el `docker-compose.yaml` de la raíz (`spring.docker.compose.file: ../docker-compose.yaml`), espera a que PostgreSQL, Redis y RabbitMQ estén sanos, configura las conexiones y Flyway aplica las migraciones. En `dev` no necesitas levantar los contenedores a mano. Consola de RabbitMQ: `http://localhost:15672` (guest/guest).
+
+### Sistema distribuido completo (5 regiones + 4 subsistemas)
+
+```bash
+docker compose -f infra/docker-compose.yml up -d --build --wait                  # CO y BR + subsistemas
+docker compose -f infra/docker-compose.yml --profile full up -d --build --wait   # las 5 regiones
+scripts/demo-mensajeria.sh co                                                    # demostración del flujo de mensajes
+docker compose -f infra/docker-compose.yml --profile full down                   # apagar (conserva datos)
+```
+
+| Servicio | Dirección |
+|---|---|
+| Gateway (entrada única) | `http://localhost:8000/api/{co,br,us,fr,jp}/...` o `http://co.jornal.localhost:8000/...` |
+| Estado de un subsistema | `http://localhost:8000/subsystems/payments/status` (también dispatch, notifications, billing) |
+| Swagger de una región | `http://localhost:8000/api/co/swagger-ui.html` |
+| RabbitMQ (consola) | `http://localhost:15673` (jornal / jornal-dev-password) |
+| Mailpit | `http://localhost:8025` |
+| Prometheus / Grafana | `http://localhost:9090` / `http://localhost:3000` (admin / admin) |
+| PostgreSQL | `localhost:55432` (bases `jornal_co` ... `jornal_jp` y una por subsistema) |
+
+Administrador de cada región: `admin@{co,br,us,fr,jp}.jornal.test` / `Admin12345`. Si una región está apagada, el gateway responde `503 SERVICE_UNAVAILABLE` solo para ella. Cada JVM corre con `-Xmx256m` (unos 420 MB por core).
 
 ### 3. Comprobar que funciona
 
@@ -187,13 +211,24 @@ Pendiente (P2 de la fase F2): firma RS256 con JWKS para que los subsistemas vali
 ## Estructura del proyecto
 
 ```
-jornal-backend
-├── docker-compose.yaml            # PostGIS + Redis para desarrollo
+jornal
+├── pom.xml                        # padre multimódulo (jornal-parent)
+├── Dockerfile                     # multietapa; --build-arg MODULE=jornal-core|jornal-payments|...
+├── docker-compose.yaml            # desarrollo del core: PostGIS, Redis y RabbitMQ
+├── infra/                         # sistema completo: docker-compose.yml, nginx, postgres, prometheus, grafana
+├── scripts/demo-mensajeria.sh     # demostración Outbox → RabbitMQ → inbox
 ├── .env / .env.example            # credenciales locales (.env NO se versiona)
 ├── documento.md                   # plan de desarrollo por fases (F0 a F11)
 ├── docs/ESTADO-ACTUAL.md          # estado de partida del backend
-├── pom.xml
-└── src
+├── jornal-common/                 # paquete jornal.common (fuera de com.jornal para que el core no lo escanee)
+│   ├── events/                    # CloudEvent (sobre 1.0), EventTypes
+│   ├── messaging/                 # Topology (exchange, colas por subsistema y región, DLQ), MessagingConfig
+│   └── subsystem/                 # Inbox, CloudEventListener, CloudEventHandler, RegionProfileCache, /status
+├── jornal-payments/               # subsistema (hoy: esqueleto con inbox y caché de perfiles)
+├── jornal-dispatch/               # subsistema (esqueleto)
+├── jornal-notifications/          # subsistema (esqueleto)
+├── jornal-billing/                # subsistema (esqueleto)
+└── jornal-core/src                # core regional (una instancia por país)
     ├── main
     │   ├── java/com/jornal
     │   │   ├── JornalBackendApplication.java
@@ -216,6 +251,7 @@ jornal-backend
     │   │   │   ├── controllers   # CategoryController, AdminCategoryController
     │   │   │   ├── dto
     │   │   │   └── enums         # ErrorCatalog
+    │   │   ├── integration   # eventos internos → CloudEvents en el Outbox; reintento del Outbox cada 30 s
     │   │   └── workers       # raíz: WorkerApi, WorkerSummary, WorkerProfile, WorkerService
     │   │       ├── controllers   # WorkerController
     │   │       ├── listeners     # WorkerEventListener
@@ -224,13 +260,15 @@ jornal-backend
     │   └── resources
     │       ├── application.yaml, application-dev.yaml, application-prod.yaml
     │       ├── messages*.properties  # errores en en (respaldo), es, pt, fr y ja
-    │       └── db/migration      # V1 a V12
+    │       └── db/migration      # V1 a V14
     └── test/java/com/jornal
         ├── ModularidadTest.java              # límites entre módulos
         ├── NoCountryConditionalsTest.java    # falla si hay literales de país en el código
         ├── SecurityRolesTest.java            # 200/401/403 por rol con JWT reales, errores traducidos
         ├── LocalizationIntegrationTest.java  # criterio de F1 en CO con PostgreSQL real (Docker)
         ├── JapanRegionIntegrationTest.java   # la misma app con APP_REGION=JP (Docker)
+        ├── AuthFlowIntegrationTest.java      # sesión: refresh, reuso, logout (Docker)
+        ├── EventExternalizationIntegrationTest.java  # Outbox → RabbitMQ con CloudEvents (Docker)
         ├── JornalBackendApplicationTests     # arranque con Testcontainers (Docker)
         ├── region/services/DocumentValidatorsTest.java
         ├── shared/LocalesTest.java
@@ -330,8 +368,18 @@ Si la cuenta deja de ser elegible (desverificada, desactivada o eliminada), `Wor
 | `V11__catalog_i18n_prices` | Traducciones pt-BR, fr-FR y ja-JP; `category_prices` con precios de demostración por país |
 | `V12__users_names_addresses_business` | `given_name` y `family_name`; `addresses` y `address_fields`; `business_profiles`; sin defaults de país en `users` |
 | `V13__refresh_tokens` | `refresh_tokens` (hash, familia, vencimiento, revocación y reemplazo) |
+| `V14__event_publication` | Outbox: tabla `event_publication` de Spring Modulith (esquema v2) |
 
-La siguiente migración libre es `V14`.
+La siguiente migración libre del core es `V15`. Los subsistemas usan `jornal-common/.../db/subsystem` (V1: `inbox` y `region_profile_cache`); sus migraciones propias empezarán en `V100`.
+
+## Mensajería entre procesos
+
+- Exchange topic durable `jornal.events`. Clave de enrutamiento `<región>.<type>`, por ejemplo `co.jornal.region.profile-updated.v1`.
+- Una cola durable por subsistema y región (`payments.co`, `payments.br`, ...), enlazada con `<región>.#`. La topología está en `jornal.common.messaging.Topology` y la declaran todos los procesos al arrancar, así las colas existen aunque el consumidor esté caído.
+- Sobre **CloudEvents 1.0** (JSON): `specversion`, `id`, `source` (`jornal-core-co`), `type`, `time` (UTC), `subject`, `region`, `correlationid`, `aggregateversion`, `data`.
+- **Outbox**: el core publica `CloudEvent` como evento interno; Spring Modulith lo guarda en `event_publication` en la misma transacción del cambio y lo envía a RabbitMQ después del commit. Si RabbitMQ está caído, `OutboxResubmitter` lo reintenta cada 30 s.
+- **Inbox**: cada subsistema registra el `id` de cada mensaje en `inbox` y descarta duplicados. Los handlers (`CloudEventHandler`) corren en la misma transacción. Tres reintentos con espera creciente; después, a `jornal.dead-letter`.
+- Evento disponible hoy: `jornal.region.profile-updated.v1` (los subsistemas guardan el perfil y solo aplican versiones más nuevas).
 
 ---
 
@@ -381,7 +429,9 @@ La siguiente migración libre es `V14`.
 
 **Verificado con Docker (24/11/2026)**
 - [x] **F2 (P1)**: access token de 15 minutos con claim `region` validado, refresh tokens con rotación, detección de reuso y revocación (logout, cambio de contraseña, bloqueo y borrado), CORS y Swagger con Bearer
-- [x] 64 pruebas en verde: arranque completo, migraciones V1 a V13, F1 en CO y en JP, flujo de sesión de F2, con PostgreSQL real
+- [x] **F3**: Maven multimódulo, `jornal-common`, 4 subsistemas como procesos independientes, RabbitMQ con Outbox, CloudEvents e inbox, Dockerfile multietapa y `infra/docker-compose.yml` con 5 cores, gateway, Mailpit, Prometheus y Grafana
+- [x] 67 pruebas en verde (65 del core y 2 de pagos), con PostgreSQL y RabbitMQ reales
+- [x] Sistema completo verificado con Docker (24/11/2026): las 5 regiones sanas detrás del gateway y `scripts/demo-mensajeria.sh` en verde (el cambio de perfil llega a pagos y el reenvío se procesa una vez)
 
 **Pendiente de confirmar por el equipo**
 - [ ] Valores marcados `VERIFICAR` en `region_profiles`, `region_tax_rules`, `region_holidays` y precios de `category_prices`, con fuentes oficiales vigentes
@@ -393,7 +443,7 @@ La siguiente migración libre es `V14`.
 El orden y los criterios de terminado están en [`documento.md`](documento.md):
 
 - **F2 (P2)** RS256 con JWKS y límite de intentos de login con Redis
-- **F3** multi-módulo Maven, 5 cores regionales, RabbitMQ con Outbox, subsistemas
+- **F3 (pendiente menor)** TLS de desarrollo en el gateway (hoy HTTP en el puerto 8000)
 - **F4** pedidos y saga · **F5** pagos · **F6** asignación y seguimiento · **F7** notificaciones
 - **F8** facturación y calificaciones · **F9** frontend · **F10** observabilidad · **F11** pruebas de falla y de localización
 

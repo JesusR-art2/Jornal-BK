@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: cores
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: [core-co:8080, core-br:8080, core-us:8080, core-fr:8080, core-jp:8080]
+
+  - job_name: subsystems
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: [payments:8080, dispatch:8080, notifications:8080, billing:8080]
+
+  - job_name: rabbitmq
+    static_configs:
+      - targets: [rabbitmq:15692]
