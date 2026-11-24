@@ -23,6 +23,8 @@ public final class Topology {
     public static final String EXCHANGE = "jornal.events";
     public static final String DEAD_LETTER_EXCHANGE = "jornal.events.dlx";
     public static final String DEAD_LETTER_QUEUE = "jornal.dead-letter";
+    /** Exchange topic NO durable para datos efímeros (posición en vivo): gana el último valor, perder uno no importa. */
+    public static final String LIVE_EXCHANGE = "jornal.live";
     public static final String CORE = "core";
     public static final List<String> SUBSYSTEMS = List.of("payments", "dispatch", "notifications", "billing");
 
@@ -54,6 +56,7 @@ public final class Topology {
         all.add(dlx);
         all.add(deadLetters);
         all.add(BindingBuilder.bind(deadLetters).to(dlx));
+        all.add(ExchangeBuilder.topicExchange(LIVE_EXCHANGE).durable(false).build());
 
         SUBSCRIPTIONS.forEach((consumer, patterns) -> {
             for (String region : regions) {

@@ -48,6 +48,9 @@ x-core: &core
 
 x-subsystem-env: &subsystem-env
   SERVER_PORT: "8080"
+  REDIS_HOST: redis
+  JWT_ISSUER: jornal-docker
+  JWT_SECRET: ${JWT_SECRET:-docker-dev-only-secret-change-me-32-bytes!!}
   DB_USER: ${POSTGRES_USER:-jornalAdmin}
   DB_PASSWORD: ${POSTGRES_PASSWORD:-jornal-dev-password}
   RABBITMQ_HOST: rabbitmq

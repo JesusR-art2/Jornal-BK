@@ -3,7 +3,7 @@
 Plataforma tipo Uber para que personas, tiendas o empresas soliciten un ayudante o trabajador para una tarea puntual, sin contrato formal (trabajo informal por jornal). El backend está pensado como un **monolito modular** que pueda evolucionar a un sistema distribuido.
 
 > **Estado:** MVP en desarrollo. Última actualización: 24 de noviembre de 2026.
-> Existen la infraestructura, la seguridad con JWT y los módulos `region`, `users`, `catalog` y `workers`. El plan por fases para llevarlo a sistema distribuido está en [`documento.md`](documento.md) y el estado de partida en [`docs/ESTADO-ACTUAL.md`](docs/ESTADO-ACTUAL.md). Fases cerradas: **F0 (correcciones)**, **F1 (perfil regional y localización)**, **F2 P1 (sesión segura)**, **F3 (procesos, regiones e infraestructura)**, **F4 (pedidos y saga)** y **F5 (pagos)**.
+> Existen la infraestructura, la seguridad con JWT y los módulos `region`, `users`, `catalog` y `workers`. El plan por fases para llevarlo a sistema distribuido está en [`documento.md`](documento.md) y el estado de partida en [`docs/ESTADO-ACTUAL.md`](docs/ESTADO-ACTUAL.md). Fases cerradas: **F0 (correcciones)**, **F1 (perfil regional y localización)**, **F2 P1 (sesión segura)**, **F3 (procesos, regiones e infraestructura)**, **F4 (pedidos y saga)**, **F5 (pagos)** y **F6 (asignación y seguimiento)**.
 
 ---
 
@@ -93,6 +93,7 @@ docker compose -f infra/docker-compose.yml up -d --build --wait                 
 docker compose -f infra/docker-compose.yml --profile full up -d --build --wait   # las 5 regiones
 scripts/demo-mensajeria.sh co                                                    # demostración del flujo de mensajes
 scripts/demo-pagos.sh                                                            # pedido real: autoriza, anula y rechazo simulado
+scripts/demo-asignacion.sh                                                       # pedido real: oferta, aceptación, seguimiento y captura
 docker compose -f infra/docker-compose.yml --profile full down                   # apagar (conserva datos)
 ```
 
@@ -226,7 +227,7 @@ jornal
 │   ├── messaging/                 # Topology (exchange, colas por subsistema y región, DLQ), MessagingConfig
 │   └── subsystem/                 # Inbox, CloudEventListener, CloudEventHandler, RegionProfileCache, /status
 ├── jornal-payments/               # subsistema de pagos: 3 flujos simulados, libro particionado por región
-├── jornal-dispatch/               # subsistema (esqueleto)
+├── jornal-dispatch/               # subsistema de asignación: candidatos, ofertas, reserva atómica, posición en vivo (Redis)
 ├── jornal-notifications/          # subsistema (esqueleto)
 ├── jornal-billing/                # subsistema (esqueleto)
 └── jornal-core/src                # core regional (una instancia por país)
@@ -344,8 +345,8 @@ Validadores de documentos por nombre (`documentTypes[].validator`): `regex`, `ni
 | Método y ruta | Acceso | Descripción |
 |---|---|---|
 | `GET /workers/me` | WORKER | Ver el propio perfil |
-| `PUT /workers/me` | WORKER | Crear o reemplazar el perfil: `bio`, `workRadiusKm` (1 a 100) y `categoryIds` (1 a 5, activas) |
-| `PATCH /workers/me/availability` | WORKER | `{"available": true}` o `false`; para activarla hay que estar verificado y tener una categoría activa |
+| `PUT /workers/me` | WORKER | Crear o reemplazar el perfil: `bio`, `workRadiusKm` (1 a 100), `categoryIds` (1 a 5, activas) y ubicación base `baseLatitude`/`baseLongitude` |
+| `PATCH /workers/me/availability` | WORKER | `{"available": true}` o `false`; para activarla hay que estar verificado, tener una categoría activa y ubicación base (`WRK006`) |
 | `GET /workers/{userId}` | autenticado | Vista pública: nombre, bio, calificación y categorías (solo activos y verificados) |
 
 Si la cuenta deja de ser elegible (desverificada, desactivada o eliminada), `WorkerEventListener` apaga la disponibilidad.
@@ -383,6 +384,24 @@ Cuerpo de cotizar y crear (`RequestDraft`): `categoryId`, `units` (1 a 30), `sch
 | `jornal.payment.captured.v1` + `jornal.billing.receipt-issued.v1` | `→ COMPLETED` | — |
 
 Cada cambio emite además `jornal.request.status-changed.v1` (notificaciones). Las respuestas de un intento de pago viejo, tardías o duplicadas se ignoran. Plazos (`RequestTimeouts`, una sola instancia con ShedLock): sin respuesta de pagos en 2 min → `CANCELLED`; la hora pasa sin trabajador → `EXPIRED` con compensación; sin confirmación en 24 h → se confirma solo. Concurrencia: versión optimista (`@Version`); un choque devuelve 409 `CONCURRENT_UPDATE` en la API y se reintenta en los mensajes.
+
+### Dispatch (subsistema `jornal-dispatch`): asignación y seguimiento
+
+Consume `jornal.worker.updated.v1` (foto del trabajador que publica el core al cambiar su perfil, disponibilidad o verificación), `jornal.request.assignment-requested.v1`, `jornal.request.cancelled.v1` y `jornal.request.status-changed.v1`.
+
+- **Candidatos**: misma categoría, elegibles y disponibles, dentro de su radio, sin reserva, sin otra oferta pendiente y a los que no se les ofreció ya el pedido. Posición: la en vivo si está vigente (Redis); si no, la base del perfil. Orden: distancia redondeada al km, menos pedidos asignados hoy (balanceo de carga) y mejor calificación.
+- **Oferta secuencial (D7)**: un candidato a la vez con plazo (`DISPATCH_OFFER_TIMEOUT`, 45 s). Si rechaza o vence, pasa al siguiente; tras `DISPATCH_MAX_OFFERS` (5) o sin candidatos durante `DISPATCH_SEARCH_TIMEOUT` (120 s) responde `jornal.dispatch.assignment-failed.v1` y el core compensa el pago. Cada oferta sale como `jornal.dispatch.offer-created.v1` (para notificaciones).
+- **Reserva atómica**: tabla `reservations` con el trabajador como clave y el pedido único: de dos aceptaciones simultáneas solo una inserción gana. Se libera cuando el pedido termina o se cancela.
+- **Posición en vivo**: `PUT /locations/me` cada 5 a 10 s; se guarda en Redis (`geo:live:<región>` y una clave con TTL de 60 s) y sale como `jornal.dispatch.worker-location.v1` por el exchange no durable `jornal.live` (gana el último valor).
+- **Seguridad**: dispatch valida el mismo JWT del core (HS256 compartido, respaldo de D10); la región sale del claim `region`.
+
+| Ruta (gateway: `/subsystems/dispatch/...`) | Acceso | Descripción |
+|---|---|---|
+| `GET /offers/me` | WORKER | Ofertas pendientes con su plazo, distancia, categoría, dirección y hora |
+| `POST /offers/{id}/accept` | WORKER | Acepta: reserva atómica y `worker-assigned` (409 `OFFER_EXPIRED` o `WORKER_BUSY`) |
+| `POST /offers/{id}/reject` | WORKER | Rechaza: la oferta pasa al siguiente candidato |
+| `PUT /locations/me` | WORKER | `{"latitude", "longitude"}`: posición en vivo |
+| `GET /tracking/{requestId}` | cliente o trabajador del pedido | Estado, posición del trabajador y distancia al lugar |
 
 ### Payments (subsistema `jornal-payments`)
 
@@ -430,8 +449,9 @@ Los vouchers se dan por pagados solos a los 10 s y vencen a los 90 s, por debajo
 | `V13__refresh_tokens` | `refresh_tokens` (hash, familia, vencimiento, revocación y reemplazo) |
 | `V14__event_publication` | Outbox: tabla `event_publication` de Spring Modulith (esquema v2) |
 | `V15__requests` | `service_requests` (con punto PostGIS generado), `request_lines`, `request_status_history`, `inbox` del core y `shedlock` |
+| `V16__worker_base_location` | Ubicación base del trabajador (`base_latitude`, `base_longitude`) |
 
-La siguiente migración libre del core es `V16`. Los subsistemas usan `jornal-common/.../db/subsystem` (V1: `inbox` y `region_profile_cache`); sus migraciones propias empezarán en `V100`.
+La siguiente migración libre del core es `V17`. Los subsistemas usan `jornal-common/.../db/subsystem` (V1: `inbox` y `region_profile_cache`); sus migraciones propias empezarán en `V100`.
 
 ## Mensajería entre procesos
 
@@ -494,7 +514,9 @@ La siguiente migración libre del core es `V16`. Los subsistemas usan `jornal-co
 - [x] **F3**: Maven multimódulo, `jornal-common`, 4 subsistemas como procesos independientes, RabbitMQ con Outbox, CloudEvents e inbox, Dockerfile multietapa y `infra/docker-compose.yml` con 5 cores, gateway, Mailpit, Prometheus y Grafana
 - [x] **F4**: módulo `requests` con carrito (cotizar), pedido idempotente, precios por perfil, máquina de estados con historial, saga orquestada con compensaciones, plazos con ShedLock y cola `core.<región>` con inbox
 - [x] **F5**: subsistema de pagos con interfaz `PaymentGateway` y adaptadores simulados por flujo (autorizar y capturar, cobrar y reembolsar, voucher asíncrono), idempotencia por pedido e intento, libro de movimientos con liquidación, tablas particionadas por región, simulador configurable en caliente y outbox de subsistemas
-- [x] 84 pruebas en verde (75 del core y 9 de pagos), con PostgreSQL y RabbitMQ reales
+- [x] **F6**: subsistema de asignación con proyección de trabajadores (`jornal.worker.updated.v1`), candidatos por categoría, radio y disponibilidad ordenados por distancia, carga del día y calificación, ofertas secuenciales con plazo, reserva atómica, posición en vivo en Redis GEO con TTL por el exchange no durable `jornal.live` y seguimiento para el cliente
+- [x] 92 pruebas en verde (75 del core, 9 de pagos y 8 de asignación), con PostgreSQL, RabbitMQ y Redis reales
+- [x] Verificado en Docker (24/11/2026): `scripts/demo-asignacion.sh` (pedido real ofrecido al trabajador a 1,3 km, aceptado, seguido en vivo hasta 0,2 km y capturado)
 - [x] Verificado en Docker (24/11/2026): `scripts/demo-pagos.sh` (un pedido real se autoriza, se anula al cancelarlo y se rechaza con el simulador) y `scripts/demo-mensajeria.sh`
 - [x] Sistema completo verificado con Docker (24/11/2026): las 5 regiones sanas detrás del gateway y `scripts/demo-mensajeria.sh` en verde (el cambio de perfil llega a pagos y el reenvío se procesa una vez)
 

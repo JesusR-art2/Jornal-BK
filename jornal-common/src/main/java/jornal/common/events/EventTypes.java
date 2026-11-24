@@ -22,6 +22,9 @@ public final class EventTypes {
     /** Pedido cancelado: pagos anula o reembolsa y asignación libera la reserva. */
     public static final String REQUEST_CANCELLED = "jornal.request.cancelled.v1";
 
+    /** Foto completa del trabajador (perfil, disponibilidad, elegibilidad) para la proyección de asignación. */
+    public static final String WORKER_UPDATED = "jornal.worker.updated.v1";
+
     // ---- pagos
     public static final String PAYMENT_AUTHORIZED = "jornal.payment.authorized.v1";
     public static final String PAYMENT_FAILED = "jornal.payment.failed.v1";
@@ -32,6 +35,10 @@ public final class EventTypes {
     // ---- asignación
     public static final String DISPATCH_WORKER_ASSIGNED = "jornal.dispatch.worker-assigned.v1";
     public static final String DISPATCH_ASSIGNMENT_FAILED = "jornal.dispatch.assignment-failed.v1";
+    /** Se ofreció un pedido a un trabajador (notificaciones le avisa). */
+    public static final String DISPATCH_OFFER_CREATED = "jornal.dispatch.offer-created.v1";
+    /** Posición en vivo del trabajador. Va por el exchange no durable {@code jornal.live}. */
+    public static final String DISPATCH_WORKER_LOCATION = "jornal.dispatch.worker-location.v1";
 
     // ---- facturación
     public static final String BILLING_RECEIPT_ISSUED = "jornal.billing.receipt-issued.v1";

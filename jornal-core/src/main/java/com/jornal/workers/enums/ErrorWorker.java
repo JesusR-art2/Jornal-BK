@@ -9,7 +9,8 @@ public enum ErrorWorker implements ErrorCode {
     WRK002_NOT_A_WORKER(HttpStatus.FORBIDDEN, "Only active worker accounts can have a worker profile"),
     WRK003_INVALID_CATEGORIES(HttpStatus.BAD_REQUEST, "One or more categories do not exist or are not active"),
     WRK004_NOT_VERIFIED(HttpStatus.FORBIDDEN, "Your account must be verified before you can be available"),
-    WRK005_CATEGORY_REQUIRED(HttpStatus.UNPROCESSABLE_ENTITY, "Select at least one active category before becoming available");
+    WRK005_CATEGORY_REQUIRED(HttpStatus.UNPROCESSABLE_ENTITY, "Select at least one active category before becoming available"),
+    WRK006_LOCATION_REQUIRED(HttpStatus.UNPROCESSABLE_ENTITY, "Set your base location before becoming available");
 
     private final HttpStatus status;
     private final String message;

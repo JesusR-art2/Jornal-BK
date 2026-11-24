@@ -7,6 +7,10 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/jornal_dispatch}
     username: ${DB_USER:jornalAdmin}
     password: ${DB_PASSWORD:change-me}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
@@ -21,12 +25,22 @@ spring:
           initial-interval: 1s
           multiplier: 2
   flyway:
-    locations: classpath:db/subsystem
+    locations: classpath:db/subsystem,classpath:db/migration
 jornal:
   subsystem:
     name: dispatch
   messaging:
     regions: ${MESSAGING_REGIONS:co,br,us,fr,jp}
+  security:
+    jwt:
+      # Mismo secreto y emisor que los cores: dispatch valida el token del trabajador y del cliente.
+      issuer: ${JWT_ISSUER:jornal-dev}
+      secret: ${JWT_SECRET:dev-only-secret-change-me-minimum-32-bytes!!}
+  dispatch:
+    offer-timeout: ${DISPATCH_OFFER_TIMEOUT:45s}      # plazo para aceptar una oferta
+    search-timeout: ${DISPATCH_SEARCH_TIMEOUT:120s}   # sin candidatos durante este tiempo: assignment-failed
+    max-offers: ${DISPATCH_MAX_OFFERS:5}              # ofertas por pedido antes de rendirse
+    live-ttl: ${DISPATCH_LIVE_TTL:60s}                # una posición en vivo más vieja se descarta
 management:
   endpoints:
     web:

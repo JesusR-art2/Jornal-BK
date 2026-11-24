@@ -33,6 +33,12 @@ public class WorkerProfile {
     @Column(nullable = false)
     private boolean available = false;
 
+    @Column(name = "base_latitude")
+    private Double baseLatitude;
+
+    @Column(name = "base_longitude")
+    private Double baseLongitude;
+
     @Column(name = "rating_avg", nullable = false, precision = 3, scale = 2)
     private BigDecimal ratingAvg = BigDecimal.ZERO;
 

@@ -28,6 +28,7 @@ public class WorkerService implements WorkerApi {
     private final WorkerProfileMapper mapper;
     private final UserApi userApi;
     private final CatalogApi catalogApi;
+    private final WorkerSnapshots snapshots;
 
 
     @Transactional(readOnly = true)
@@ -51,7 +52,9 @@ public class WorkerService implements WorkerApi {
         profile.getCategoryIds().clear();
         categories.forEach(c -> profile.getCategoryIds().add(c.id()));
 
-        return WorkerProfileResponse.of(repository.save(profile), categories);
+        WorkerProfile saved = repository.save(profile);
+        snapshots.publish(saved);
+        return WorkerProfileResponse.of(saved, categories);
     }
 
     @Transactional
@@ -67,8 +70,12 @@ public class WorkerService implements WorkerApi {
             if(categories.isEmpty()) {
                 throw new ApiException(ErrorWorker.WRK005_CATEGORY_REQUIRED);
             }
+            if (profile.getBaseLatitude() == null || profile.getBaseLongitude() == null) {
+                throw new ApiException(ErrorWorker.WRK006_LOCATION_REQUIRED);
+            }
         }
         profile.setAvailable(available);
+        snapshots.publish(profile);
         return WorkerProfileResponse.of(profile, categories);
     }
 

@@ -130,6 +130,8 @@ public class RequestSaga {
         data.put("clientId", r.getClientId().toString());
         data.put("categoryId", r.getCategoryId().toString());
         data.put("categorySlug", r.getCategorySlug());
+        data.put("categoryName", r.getCategoryName());
+        data.put("addressText", r.getAddressText());
         data.put("units", r.getUnits());
         data.put("latitude", r.getLatitude());
         data.put("longitude", r.getLongitude());

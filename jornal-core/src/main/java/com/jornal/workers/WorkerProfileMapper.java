@@ -12,6 +12,8 @@ public interface WorkerProfileMapper {
     @BeanMapping(ignoreByDefault = true)
     @Mapping(target = "bio", source = "bio")
     @Mapping(target = "workRadiusKm", source = "workRadiusKm")
+    @Mapping(target = "baseLatitude", source = "baseLatitude")
+    @Mapping(target = "baseLongitude", source = "baseLongitude")
     void update(WorkerProfileRequest request, @MappingTarget WorkerProfile profile);
 
 }
