@@ -24,6 +24,13 @@ public interface ServiceRequestRepository extends JpaRepository<ServiceRequest, 
 
     Page<ServiceRequest> findByStatus(RequestStatus status, Pageable pageable);
 
+    @org.springframework.data.jpa.repository.Query("select r.status, count(r) from ServiceRequest r group by r.status")
+    java.util.List<Object[]> countGroupedByStatus();
+
+    long countByCreatedAtGreaterThanEqual(java.time.Instant since);
+
+    long countByStatusAndUpdatedAtGreaterThanEqual(RequestStatus status, java.time.Instant since);
+
     List<ServiceRequest> findTop100ByStatusAndUpdatedAtBefore(RequestStatus status, Instant before);
 
     List<ServiceRequest> findTop100ByStatusAndScheduledAtBefore(RequestStatus status, Instant before);

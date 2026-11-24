@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: jornal
+    folder: Jornal
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

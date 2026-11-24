@@ -21,6 +21,7 @@ import java.util.UUID;
  */
 @Component
 @RequiredArgsConstructor
+@lombok.extern.slf4j.Slf4j
 public class RequestTransitions {
 
     private final RequestStatusChangeRepository history;
@@ -37,12 +38,14 @@ public class RequestTransitions {
         request.setUpdatedAt(now);
         record(request, from, to, actor, reason, now);
         statusChanged(request, from, reason);
+        log.info("Request {} {} -> {} by {}{}", request.getId(), from, to, actor.label(), reason == null ? "" : " (" + reason + ")");
     }
 
     /** Primera fila del historial (creación). */
     public void created(ServiceRequest request, Actor actor) {
         record(request, null, request.getStatus(), actor, null, request.getCreatedAt());
         statusChanged(request, null, null);
+        log.info("Request {} created in {} by {}", request.getId(), request.getStatus(), actor.label());
     }
 
     public void emit(ServiceRequest request, String type, Map<String, Object> data) {

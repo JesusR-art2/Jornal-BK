@@ -1,0 +1,96 @@
+{
+  "uid": "jornal-overview",
+  "title": "Jornal: sistema distribuido",
+  "tags": ["jornal"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "region",
+        "label": "Región",
+        "type": "query",
+        "query": "label_values(jornal_requests, region)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Servicios (1 = arriba, 0 = caído)",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 5 },
+      "targets": [{ "expr": "up{job=~\"cores|subsystems\"}", "legendFormat": "{{instance}}" }],
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "CAÍDO", "color": "red" }, "1": { "text": "ARRIBA", "color": "green" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "bargauge",
+      "title": "Pedidos por estado y región",
+      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 9 },
+      "targets": [{ "expr": "sum by (region, status) (jornal_requests{region=~\"$region\"}) > 0", "legendFormat": "{{region}} {{status}}" }],
+      "options": { "displayMode": "gradient", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Tiempo de asignación (p50 y p95)",
+      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 9 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.5, sum by (le, region) (rate(jornal_dispatch_assignment_time_seconds_bucket{region=~\"$region\"}[5m])))", "legendFormat": "p50 {{region}}" },
+        { "expr": "histogram_quantile(0.95, sum by (le, region) (rate(jornal_dispatch_assignment_time_seconds_bucket{region=~\"$region\"}[5m])))", "legendFormat": "p95 {{region}}" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Fallas de pago (últimos 15 min)",
+      "gridPos": { "x": 0, "y": 14, "w": 8, "h": 8 },
+      "targets": [{ "expr": "sum by (region, reason) (increase(jornal_payments_failures_total{region=~\"$region\"}[15m]))", "legendFormat": "{{region}} {{reason}}" }]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Asignaciones fallidas (últimos 15 min)",
+      "gridPos": { "x": 8, "y": 14, "w": 8, "h": 8 },
+      "targets": [{ "expr": "sum by (region, reason) (increase(jornal_dispatch_assignment_failed_total{region=~\"$region\"}[15m]))", "legendFormat": "{{region}} {{reason}}" }]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Mensajes procesados, duplicados y con error (por minuto)",
+      "gridPos": { "x": 16, "y": 14, "w": 8, "h": 8 },
+      "targets": [{ "expr": "sum by (consumer, outcome) (rate(jornal_messages_total[5m])) * 60", "legendFormat": "{{consumer}} {{outcome}}" }]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Profundidad de colas (RabbitMQ)",
+      "gridPos": { "x": 0, "y": 22, "w": 16, "h": 9 },
+      "targets": [{ "expr": "sum by (queue) (rabbitmq_detailed_queue_messages) > 0", "legendFormat": "{{queue}}" }]
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Mensajes muertos (jornal.dead-letter)",
+      "gridPos": { "x": 16, "y": 22, "w": 8, "h": 9 },
+      "targets": [{ "expr": "sum(rabbitmq_detailed_queue_messages{queue=\"jornal.dead-letter\"}) or vector(0)" }],
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } } },
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    }
+  ]
+}

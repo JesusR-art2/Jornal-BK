@@ -24,6 +24,12 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class WorkerService implements WorkerApi {
 
+    @Override
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public long countAvailable() {
+        return repository.countByAvailableTrue();
+    }
+
     private final WorkerProfileRepository repository;
     private final WorkerProfileMapper mapper;
     private final UserApi userApi;

@@ -42,7 +42,15 @@ jornal:
     max-offers: ${DISPATCH_MAX_OFFERS:5}              # ofertas por pedido antes de rendirse
     live-ttl: ${DISPATCH_LIVE_TTL:60s}                # una posición en vivo más vieja se descarta
 management:
+  metrics:
+    distribution:
+      percentiles-histogram:
+        "[jornal.dispatch.assignment.time]": true   # para p50 y p95 en Grafana
   endpoints:
     web:
       exposure:
         include: health,info,prometheus
+logging:
+  pattern:
+    # Id de correlación (X-Correlation-Id del gateway o correlationid del mensaje) en cada línea de log
+    correlation: "[cid=%X{cid:-}] "

@@ -22,6 +22,10 @@
             <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+        </dependency>
         <!-- Soporte de subsistemas: inbox y caché de perfiles con JDBC. Opcionales para el core. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

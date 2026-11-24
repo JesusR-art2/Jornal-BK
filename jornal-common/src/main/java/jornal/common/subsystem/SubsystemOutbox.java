@@ -38,7 +38,7 @@ public class SubsystemOutbox {
     public CloudEvent publish(String type, String region, String subject, String correlationId,
                               Map<String, Object> data) {
         CloudEvent event = CloudEvent.of("jornal-" + properties.name(), type, region, subject,
-                System.currentTimeMillis(), data, Instant.now(), correlationId);
+                System.currentTimeMillis(), data, Instant.now(), jornal.common.observability.Correlation.currentOr(correlationId));
         enqueue(event);
         return event;
     }

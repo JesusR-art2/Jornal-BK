@@ -39,3 +39,7 @@ management:
     web:
       exposure:
         include: health,info,prometheus
+logging:
+  pattern:
+    # Id de correlación (X-Correlation-Id del gateway o correlationid del mensaje) en cada línea de log
+    correlation: "[cid=%X{cid:-}] "

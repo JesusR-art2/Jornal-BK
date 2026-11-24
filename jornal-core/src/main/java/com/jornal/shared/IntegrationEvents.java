@@ -30,7 +30,7 @@ public class IntegrationEvents {
     public CloudEvent publish(String type, String subject, long aggregateVersion,
                               Map<String, Object> data, String correlationId) {
         CloudEvent event = CloudEvent.of("jornal-core-" + region, type, region, subject, aggregateVersion,
-                data, clock.instant(), correlationId);
+                data, clock.instant(), jornal.common.observability.Correlation.currentOr(correlationId));
         publisher.publishEvent(event);
         return event;
     }

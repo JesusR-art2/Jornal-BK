@@ -1,33 +1,53 @@
 package com.jornal.integration;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import com.jornal.requests.RequestSaga;
 import jornal.common.events.CloudEvent;
+import jornal.common.observability.Correlation;
+import jornal.common.observability.MessageMetrics;
 import jornal.common.subsystem.Inbox;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Respuestas de los subsistemas para esta región. Inbox + saga en una sola transacción local: si la saga falla
  * (por ejemplo, conflicto de versión optimista), el mensaje se reintenta y el inbox no queda marcado.
+ * El {@code correlationid} del mensaje pasa al MDC: aparece en los logs y en los mensajes que emite la saga.
  */
 @Component
-@RequiredArgsConstructor
 @Slf4j
 public class CoreEventsListener {
 
     private final Inbox inbox;
     private final RequestSaga saga;
+    private final MeterRegistry metrics;
+
+    public CoreEventsListener(Inbox inbox, RequestSaga saga, ObjectProvider<MeterRegistry> metrics) {
+        this.inbox = inbox;
+        this.saga = saga;
+        this.metrics = metrics.getIfAvailable();
+    }
 
     @RabbitListener(queues = "#{coreQueueName}")
     @Transactional
     public void onEvent(CloudEvent event) {
-        if (!inbox.firstTime(event)) {
-            log.info("Duplicate message {} ({}) discarded", event.id(), event.type());
-            return;
+        try (MDC.MDCCloseable ignored = Correlation.open(event.correlationid())) {
+            if (!inbox.firstTime(event)) {
+                log.info("Duplicate message {} ({}) discarded", event.id(), event.type());
+                MessageMetrics.record(metrics, "core", event, "duplicate");
+                return;
+            }
+            try {
+                saga.handle(event);
+            } catch (RuntimeException e) {
+                MessageMetrics.record(metrics, "core", event, "error");
+                throw e;
+            }
+            MessageMetrics.record(metrics, "core", event, "ok");
         }
-        saga.handle(event);
     }
 }

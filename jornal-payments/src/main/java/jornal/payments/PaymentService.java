@@ -76,6 +76,7 @@ public class PaymentService {
             case DECLINED -> {
                 payments.transition(payment.region(), payment.id(), Payment.NEW, Payment.FAILED, null, result.reason());
                 reply(EventTypes.PAYMENT_FAILED, event, payment, Map.of("reason", result.reason()));
+                failed(payment, result.reason());
             }
             case PENDING -> {
                 payments.transition(payment.region(), payment.id(), Payment.NEW, Payment.PENDING_VOUCHER,
@@ -111,6 +112,7 @@ public class PaymentService {
     public void voucherExpired(Payment p) {
         if (payments.transition(p.region(), p.id(), Payment.PENDING_VOUCHER, Payment.FAILED, null, "VOUCHER_EXPIRED")) {
             reply(EventTypes.PAYMENT_FAILED, p, Map.of("reason", "VOUCHER_EXPIRED"));
+            failed(p, "VOUCHER_EXPIRED");
         }
     }
 
@@ -203,6 +205,12 @@ public class PaymentService {
         return Map.of("paymentId", p.id().toString(), "capturedMinor", p.amountMinor(),
                 "commissionMinor", commission, "workerPayoutMinor", workerPayout,
                 "tipPayoutMinor", tip, "platformFeeMinor", platform);
+    }
+
+    /** Métrica de fallas de pago por región, medio y motivo. */
+    private static void failed(Payment p, String reason) {
+        io.micrometer.core.instrument.Metrics.counter("jornal.payments.failures", "region", p.region(),
+                "method", p.method(), "reason", String.valueOf(reason)).increment();
     }
 
     private PaymentGateway gateway(Payment p) {

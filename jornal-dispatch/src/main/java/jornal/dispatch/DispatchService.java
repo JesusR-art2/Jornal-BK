@@ -167,6 +167,9 @@ public class DispatchService {
         data.put("distanceKm", round(offer.distanceKm()));
         outbox.publish(EventTypes.DISPATCH_WORKER_ASSIGNED, a.region(), a.requestId().toString(),
                 a.requestId().toString(), data);
+        // Tiempo de asignación: desde que el core pidió trabajador hasta la aceptación
+        io.micrometer.core.instrument.Metrics.timer("jornal.dispatch.assignment.time", "region", a.region())
+                .record(java.time.Duration.between(a.createdAt(), Instant.now()));
         log.info("Worker {} accepted request {}", workerId, a.requestId());
         return Map.of("requestId", a.requestId(), "status", "ASSIGNED");
     }
@@ -275,6 +278,8 @@ public class DispatchService {
         repository.updateAssignment(a.requestId(), "FAILED", null, a.offersMade());
         outbox.publish(EventTypes.DISPATCH_ASSIGNMENT_FAILED, a.region(), a.requestId().toString(),
                 a.requestId().toString(), Map.of("requestId", a.requestId().toString(), "reason", reason));
+        io.micrometer.core.instrument.Metrics.counter("jornal.dispatch.assignment.failed", "region", a.region(),
+                "reason", reason).increment();
         log.info("Assignment failed for request {}: {}", a.requestId(), reason);
     }
 

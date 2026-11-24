@@ -22,6 +22,12 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 public class SubsystemSupportConfig {
 
+    /** {@code X-Correlation-Id} al MDC en cada petición HTTP. */
+    @Bean
+    jornal.common.observability.CorrelationFilter correlationFilter() {
+        return new jornal.common.observability.CorrelationFilter();
+    }
+
     @Bean
     String[] subsystemQueueNames(SubsystemProperties subsystem, MessagingProperties messaging) {
         if (subsystem.name() == null || !Topology.SUBSYSTEMS.contains(subsystem.name())) {

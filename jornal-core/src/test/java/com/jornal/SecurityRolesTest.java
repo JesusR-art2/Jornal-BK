@@ -60,6 +60,7 @@ class SecurityRolesTest {
     @MockitoBean com.jornal.requests.services.RequestService requestService;
     @MockitoBean com.jornal.users.UserRepository userRepository;
     @MockitoBean com.jornal.requests.services.RatingService ratingService;
+    @MockitoBean com.jornal.console.ConsoleService consoleService;
 
     @Autowired JwtEncoder jwtEncoder;
     @Autowired JwtProperties jwtProperties;
