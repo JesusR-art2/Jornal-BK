@@ -1,8 +1,8 @@
-package com.jornal.catalog.Controllers;
+package com.jornal.catalog.controllers;
 
 
 import com.jornal.catalog.CategoryService;
-import com.jornal.catalog.DTO.CategoryResponse;
+import com.jornal.catalog.dto.CategoryResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

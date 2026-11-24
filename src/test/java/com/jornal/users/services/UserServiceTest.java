@@ -8,15 +8,18 @@ import com.jornal.users.UserMapper;
 import com.jornal.users.UserRepository;
 import com.jornal.users.enums.VerificationState;
 import com.jornal.users.LegalProperties;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -36,7 +39,15 @@ class UserServiceTest {
     @Mock PhoneNormalizer phoneNormalizer;
     @Mock LegalProperties legalProperties;
 
-    @InjectMocks UserService service;
+    static final Instant NOW = Instant.parse("2026-11-15T12:00:00Z");
+
+    UserService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new UserService(repository, mapper, passwordEncoder, events, countryRepository,
+                phoneNormalizer, legalProperties, Clock.fixed(NOW, ZoneOffset.UTC));
+    }
 
     @Test
     void deleteAccountAnonymizesUserAndPublishesIneligibleAccess() {
@@ -53,7 +64,7 @@ class UserServiceTest {
         assertThat(user.getPasswordHash()).isEqualTo("!deleted");
         assertThat(user.getVerificationState()).isEqualTo(VerificationState.PENDING);
         assertThat(user.isActive()).isFalse();
-        assertThat(user.getDeletedAt()).isNotNull();
+        assertThat(user.getDeletedAt()).isEqualTo(NOW);
 
         ArgumentCaptor<UserAccessChangedEvent> captor = ArgumentCaptor.forClass(UserAccessChangedEvent.class);
         verify(events).publishEvent(captor.capture());

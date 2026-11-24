@@ -5,8 +5,8 @@ import org.springframework.http.HttpStatus;
 
 public enum ErrorCatalog implements ErrorCode {
 
-    CAT001_CATEGORY_NOTFOUND(HttpStatus.NOT_FOUND, "Category %s does exist"),
-    CAT002_SLUG_ALREADY_EXISTS(HttpStatus.CONFLICT, "A category with slig '%s' already exists"),
+    CAT001_CATEGORY_NOTFOUND(HttpStatus.NOT_FOUND, "Category %s does not exist"),
+    CAT002_SLUG_ALREADY_EXISTS(HttpStatus.CONFLICT, "A category with slug '%s' already exists"),
     CAT003_LOCALE_NOT_SUPPORTED(HttpStatus.BAD_REQUEST, "Locale not supported");
 
     private final HttpStatus status;

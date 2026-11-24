@@ -8,52 +8,45 @@ import com.jornal.users.services.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/users")
+@RequestMapping("/users/me")
 @RequiredArgsConstructor
 public class UserController {
 
     private final UserService userService;
 
-    @GetMapping({"", "/me"})
-    public UserResponse findById(@AuthenticationPrincipal Jwt jwt){
+    @GetMapping
+    public UserResponse me(@AuthenticationPrincipal Jwt jwt) {
         return userService.findMe(userId(jwt));
     }
 
     @PatchMapping
     public UserResponse update(@AuthenticationPrincipal Jwt jwt,
-                               @Valid @RequestBody UpdateUserRequest request){
+                               @Valid @RequestBody UpdateUserRequest request) {
         return userService.update(userId(jwt), request);
     }
 
-    @PutMapping
+    @PutMapping("/password")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void updatePassword(@AuthenticationPrincipal Jwt jwt,
-                                @Valid @RequestBody ChangePasswordRequest request){
+                               @Valid @RequestBody ChangePasswordRequest request) {
         userService.updatePassword(userId(jwt), request);
     }
 
-    @PostMapping("/me/deletion")
+    @PostMapping("/deletion")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteAccount(@AuthenticationPrincipal Jwt jwt,
-                              @Valid @RequestBody DeleteAccountRequest request){
+                              @Valid @RequestBody DeleteAccountRequest request) {
         userService.deleteAccount(userId(jwt), request.currentPassword());
-    }
-
-    @DeleteMapping
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@AuthenticationPrincipal Jwt jwt){
-        userService.deactivate(userId(jwt));
     }
 
     private UUID userId(Jwt jwt) {
         return UUID.fromString(jwt.getSubject());
     }
-
 }

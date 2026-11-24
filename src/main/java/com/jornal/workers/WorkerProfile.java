@@ -51,5 +51,5 @@ public class WorkerProfile {
 
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
-    private Instant updateAt;
+    private Instant updatedAt;
 }

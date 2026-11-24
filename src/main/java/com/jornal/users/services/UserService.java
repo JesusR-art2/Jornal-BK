@@ -19,6 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -34,6 +35,7 @@ public class UserService implements UserApi{
     private final CountryRepository countryRepository;
     private final PhoneNormalizer phoneNormalizer;
     private final LegalProperties legalProperties;
+    private final Clock clock;
 
     @Transactional
     public UserResponse save(RegisterRequest request) {
@@ -57,7 +59,7 @@ public class UserService implements UserApi{
             user.setPhone(phoneNormalizer.toE164(request.phone(), country.getCode()));
         }
 
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         user.setTermsVersion(legalProperties.termsVersion());
         user.setTermsAcceptedAt(now);
         user.setPrivacyVersion(legalProperties.privacyVersion());
@@ -168,7 +170,7 @@ public class UserService implements UserApi{
         user.setPasswordHash("!deleted");
         user.setVerificationState(VerificationState.PENDING);
         user.setActive(false);
-        user.setDeletedAt(Instant.now());
+        user.setDeletedAt(clock.instant());
     }
 
     private void requireNotAdmin(User user){

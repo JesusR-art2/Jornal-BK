@@ -39,7 +39,7 @@ public class WorkerService implements WorkerApi {
     @Transactional
     public WorkerProfileResponse upsert(UUID userId, WorkerProfileRequest request){
         requireWorker(userId);
-        List<CategorySummary> categories = resolveCategories(request.categorysIds());
+        List<CategorySummary> categories = resolveCategories(request.categoryIds());
 
         WorkerProfile profile = repository.findById(userId).orElseGet(() -> {
             WorkerProfile created = new WorkerProfile();

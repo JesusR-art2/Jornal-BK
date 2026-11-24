@@ -27,7 +27,7 @@ public class Country {
     private String phonePrefix;
 
     @Column(name = "commission_bps", nullable = false)
-    private int comissionBps;
+    private int commissionBps;
 
     @Column(name = "document_types", nullable = false)
     private String documentTypes;

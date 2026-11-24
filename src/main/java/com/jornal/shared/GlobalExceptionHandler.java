@@ -34,7 +34,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .forEach(e -> errors.putIfAbsent(e.getField(), e.getDefaultMessage()));
 
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                HttpStatus.BAD_REQUEST, "Thr request contains invalid fields");
+                HttpStatus.BAD_REQUEST, "The request contains invalid fields");
         problem.setProperty("code", "VALIDATION_ERROR");
         problem.setProperty("errors", errors);
         return ResponseEntity.badRequest().body(problem);
@@ -43,8 +43,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     public ProblemDetail handleAccessDenied(AccessDeniedException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                HttpStatus.FORBIDDEN, "you do not have permission to perform this actions");
-        problem.setProperty("code","ACCES_DENIED");
+                HttpStatus.FORBIDDEN, "You do not have permission to perform this action");
+        problem.setProperty("code","ACCESS_DENIED");
         return problem;
     }
     @ExceptionHandler(Exception.class)

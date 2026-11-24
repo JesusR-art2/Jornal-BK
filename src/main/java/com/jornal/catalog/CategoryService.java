@@ -1,9 +1,9 @@
 package com.jornal.catalog;
 
-import com.jornal.catalog.DTO.CategoryRequest;
-import com.jornal.catalog.DTO.CategoryResponse;
-import com.jornal.catalog.DTO.TranslationRequest;
-import com.jornal.catalog.DTO.UpdateCategoryRequest;
+import com.jornal.catalog.dto.CategoryRequest;
+import com.jornal.catalog.dto.CategoryResponse;
+import com.jornal.catalog.dto.TranslationRequest;
+import com.jornal.catalog.dto.UpdateCategoryRequest;
 import com.jornal.catalog.enums.ErrorCatalog;
 import com.jornal.shared.ApiException;
 import com.jornal.shared.Locales;

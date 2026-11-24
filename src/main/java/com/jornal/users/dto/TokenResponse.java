@@ -1,4 +1,4 @@
 package com.jornal.users.dto;
 
-public record TokenResponse(String accesToken, String tokenType, long expiresIn) {
+public record TokenResponse(String accessToken, String tokenType, long expiresIn) {
 }

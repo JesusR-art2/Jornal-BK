@@ -11,6 +11,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
@@ -20,9 +21,10 @@ public class JwtService {
 
     private final JwtEncoder encoder;
     private final JwtProperties properties;
+    private final Clock clock;
 
     public TokenResponse issue(User user){
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         long minutes = properties.expirationMinutes();
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
@@ -32,7 +34,7 @@ public class JwtService {
                 .subject(user.getId().toString())
                 .claim("email", user.getEmail())
                 .claim("name", user.getName())
-                .claim("rol", user.getRol().name())
+                .claim("role", user.getRol().name())
                 .build();
 
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();

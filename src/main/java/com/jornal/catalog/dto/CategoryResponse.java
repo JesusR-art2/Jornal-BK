@@ -1,4 +1,4 @@
-package com.jornal.catalog.DTO;
+package com.jornal.catalog.dto;
 
 import java.util.UUID;
 

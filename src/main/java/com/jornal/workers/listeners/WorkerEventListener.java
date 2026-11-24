@@ -1,4 +1,4 @@
-package com.jornal.workers.Listeners;
+package com.jornal.workers.listeners;
 
 import com.jornal.users.UserAccessChangedEvent;
 import com.jornal.workers.WorkerProfileRepository;

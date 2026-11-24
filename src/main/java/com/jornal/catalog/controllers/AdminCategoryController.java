@@ -1,11 +1,11 @@
-package com.jornal.catalog.Controllers;
+package com.jornal.catalog.controllers;
 
 
 import com.jornal.catalog.CategoryService;
-import com.jornal.catalog.DTO.CategoryRequest;
-import com.jornal.catalog.DTO.CategoryResponse;
-import com.jornal.catalog.DTO.TranslationRequest;
-import com.jornal.catalog.DTO.UpdateCategoryRequest;
+import com.jornal.catalog.dto.CategoryRequest;
+import com.jornal.catalog.dto.CategoryResponse;
+import com.jornal.catalog.dto.TranslationRequest;
+import com.jornal.catalog.dto.UpdateCategoryRequest;
 import com.jornal.shared.PageResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

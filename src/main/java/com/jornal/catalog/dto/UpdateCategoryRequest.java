@@ -1,4 +1,4 @@
-package com.jornal.catalog.DTO;
+package com.jornal.catalog.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;

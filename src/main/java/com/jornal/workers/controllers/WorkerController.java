@@ -1,10 +1,10 @@
-package com.jornal.workers.Controllers;
+package com.jornal.workers.controllers;
 
+import com.jornal.workers.WorkerService;
 import com.jornal.workers.dto.AvailabilityRequest;
 import com.jornal.workers.dto.PublicWorkerResponse;
 import com.jornal.workers.dto.WorkerProfileRequest;
 import com.jornal.workers.dto.WorkerProfileResponse;
-import com.jornal.workers.WorkerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,33 +21,32 @@ public class WorkerController {
 
     private final WorkerService workerService;
 
-    @GetMapping
+    @GetMapping("/me")
     @PreAuthorize("hasRole('WORKER')")
     public WorkerProfileResponse me(@AuthenticationPrincipal Jwt jwt) {
         return workerService.getMine(userId(jwt));
     }
 
-    @PutMapping
+    @PutMapping("/me")
     @PreAuthorize("hasRole('WORKER')")
     public WorkerProfileResponse upsert(@AuthenticationPrincipal Jwt jwt,
-                                        @Valid @RequestBody WorkerProfileRequest request){
+                                        @Valid @RequestBody WorkerProfileRequest request) {
         return workerService.upsert(userId(jwt), request);
     }
 
-    @PatchMapping
+    @PatchMapping("/me/availability")
     @PreAuthorize("hasRole('WORKER')")
     public WorkerProfileResponse availability(@AuthenticationPrincipal Jwt jwt,
-                                              @Valid @RequestBody AvailabilityRequest request){
+                                              @Valid @RequestBody AvailabilityRequest request) {
         return workerService.setAvailability(userId(jwt), request.available());
     }
 
     @GetMapping("/{userId}")
-    public PublicWorkerResponse publicProfile(@PathVariable UUID userId){
+    public PublicWorkerResponse publicProfile(@PathVariable UUID userId) {
         return workerService.getPublic(userId);
     }
 
     private UUID userId(Jwt jwt) {
         return UUID.fromString(jwt.getSubject());
     }
-
 }

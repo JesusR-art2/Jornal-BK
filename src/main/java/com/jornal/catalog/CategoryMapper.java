@@ -1,8 +1,8 @@
 package com.jornal.catalog;
 
-import com.jornal.catalog.DTO.CategoryRequest;
-import com.jornal.catalog.DTO.CategoryResponse;
-import com.jornal.catalog.DTO.UpdateCategoryRequest;
+import com.jornal.catalog.dto.CategoryRequest;
+import com.jornal.catalog.dto.CategoryResponse;
+import com.jornal.catalog.dto.UpdateCategoryRequest;
 import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
