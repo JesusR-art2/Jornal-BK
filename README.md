@@ -3,7 +3,7 @@
 Plataforma tipo Uber para que personas, tiendas o empresas soliciten un ayudante o trabajador para una tarea puntual, sin contrato formal (trabajo informal por jornal). El backend está pensado como un **monolito modular** que pueda evolucionar a un sistema distribuido.
 
 > **Estado:** MVP en desarrollo. Última actualización: 24 de noviembre de 2026.
-> Existen la infraestructura, la seguridad con JWT y los módulos `region`, `users`, `catalog` y `workers`. El plan por fases para llevarlo a sistema distribuido está en [`documento.md`](documento.md) y el estado de partida en [`docs/ESTADO-ACTUAL.md`](docs/ESTADO-ACTUAL.md). Fases cerradas: **F0 (correcciones)** y **F1 (perfil regional y localización)**.
+> Existen la infraestructura, la seguridad con JWT y los módulos `region`, `users`, `catalog` y `workers`. El plan por fases para llevarlo a sistema distribuido está en [`documento.md`](documento.md) y el estado de partida en [`docs/ESTADO-ACTUAL.md`](docs/ESTADO-ACTUAL.md). Fases cerradas: **F0 (correcciones)**, **F1 (perfil regional y localización)** y **F2 P1 (sesión segura)**.
 
 ---
 
@@ -170,17 +170,17 @@ En producción no se usa el Docker Compose de desarrollo ni hay secretos en el r
 ## Seguridad y JWT
 
 - **Registro y login** por email y contraseña (BCrypt).
-- **Token JWT** firmado con HS256. Claims: `sub` (id del usuario), `role`, `email`, `name`, `iss`, `iat`, `exp`. El emisor y la vigencia salen de la configuración (`jornal.security.jwt.*`). La hora sale del bean `Clock` (`TimeConfig`).
-- **Validación**: el resource server valida firma, expiración y emisor. El claim `role` se convierte en la autoridad `ROLE_<rol>`.
+- **Access token JWT** firmado con HS256, vigente **15 minutos**. Claims: `sub` (id del usuario), `role`, `region`, `email`, `name`, `iss`, `iat`, `exp`. El emisor y la vigencia salen de la configuración (`jornal.security.jwt.*`). La hora sale del bean `Clock` (`TimeConfig`).
+- **Refresh token** opaco de 30 días (`jornal.security.refresh.ttl`), guardado solo como hash SHA-256 en `refresh_tokens`. `POST /auth/refresh` entrega un par nuevo y revoca el anterior (rotación). Si llega un refresh token ya rotado, se revoca toda su familia (posible robo). `POST /auth/logout` revoca la sesión. Cambiar la contraseña, bloquear o borrar la cuenta revoca todas sus sesiones.
+- **Validación**: el resource server valida firma, expiración, emisor y que `region` sea la de esta instancia (un token de otra región recibe 401). El claim `role` se convierte en la autoridad `ROLE_<rol>`.
+- **CORS** para el frontend: `jornal.cors.allowed-origins` (variable `CORS_ALLOWED_ORIGINS`; por defecto `http://localhost:4200` y `https://*.jornal.localhost`). Sin cookies: el token viaja en `Authorization`.
+- **Swagger** con botón *Authorize* (esquema Bearer JWT): pega el `accessToken` del login.
 - **Autorización por rol** con `@PreAuthorize` (por ejemplo `hasRole('ADMIN')`). `SecurityRolesTest` lo prueba con tokens reales.
 - **Errores 401 y 403** como `ProblemDetail` con `code` (`UNAUTHORIZED`, `ACCESS_DENIED`).
-- **Rutas públicas**: `/auth/**`, `GET /countries`, `/actuator/health`, Swagger y `/v3/api-docs/**`. Todo lo demás exige token.
+- **Rutas públicas**: `/auth/**`, `GET /countries`, `GET /region-profile/**`, `/actuator/health`, Swagger y `/v3/api-docs/**`. Todo lo demás exige token.
 - El login responde con el mismo error ante email inexistente, clave incorrecta o usuario desactivado, y compara siempre contra un hash para no revelar qué emails existen por tiempos de respuesta.
 
-Límites conocidos (se cierran en la fase F2 del plan):
-
-- Un token emitido sigue válido hasta que expire aunque se cambie la contraseña o se desactive la cuenta. Faltan refresh tokens revocables y un access token corto.
-- No hay límite de intentos en `/auth/login`, ni CORS, ni botón Bearer en Swagger.
+Pendiente (P2 de la fase F2): firma RS256 con JWKS para que los subsistemas validen el token sin el secreto (D10; respaldo: HS256 compartido) y límite de intentos de login con Redis (`AUTH002`). Un access token ya emitido vive hasta 15 minutos aunque la cuenta se bloquee.
 
 ---
 
@@ -249,7 +249,9 @@ Todos los endpoints exigen token salvo los marcados como públicos.
 | Método y ruta | Acceso | Descripción |
 |---|---|---|
 | `POST /auth/register` | público | Crear cuenta en el país de la instancia (no permite `ADMIN`). `givenName` y `familyName` (el nombre se compone con `nameOrder`), `acceptedTerms=true`, `country` opcional (debe coincidir), teléfono validado y normalizado a E.164, `address` opcional validada con el esquema del país. Para `BUSINESS`, `business` obligatorio: `legalName`, `taxIdType` de clase TAX, `taxIdNumber` validado con su estrategia y `billingAddress` |
-| `POST /auth/login` | público | Devuelve `{accessToken, tokenType, expiresIn}` |
+| `POST /auth/login` | público | Devuelve `{accessToken, tokenType, expiresIn, refreshToken, refreshExpiresIn}` |
+| `POST /auth/refresh` | público | `{"refreshToken"}` → par nuevo; el refresh token usado deja de servir |
+| `POST /auth/logout` | público | `{"refreshToken"}` → revoca la sesión (204 aunque el token no exista) |
 | `GET /countries` | público | Países habilitados con moneda, locale, prefijo y tipos de documento |
 
 ### Users
@@ -327,8 +329,9 @@ Si la cuenta deja de ser elegible (desverificada, desactivada o eliminada), `Wor
 | `V10__region_profiles` | Japón; BR, US, FR y JP habilitados, IT deshabilitado. `region_profiles` con direcciones, impuestos, medios de pago, documentos y festivos de los 5 países (valores `VERIFICAR`) |
 | `V11__catalog_i18n_prices` | Traducciones pt-BR, fr-FR y ja-JP; `category_prices` con precios de demostración por país |
 | `V12__users_names_addresses_business` | `given_name` y `family_name`; `addresses` y `address_fields`; `business_profiles`; sin defaults de país en `users` |
+| `V13__refresh_tokens` | `refresh_tokens` (hash, familia, vencimiento, revocación y reemplazo) |
 
-La siguiente migración libre es `V13`.
+La siguiente migración libre es `V14`.
 
 ---
 
@@ -377,7 +380,8 @@ La siguiente migración libre es `V13`.
 - [x] **F1**: perfil regional de 5 países (`APP_REGION`), 5 idiomas con `Accept-Language` y errores traducidos, catálogo traducido con precios por país, nombre en partes con `nameOrder`, direcciones validadas por país, rol `BUSINESS` con identificación fiscal validada por estrategia, administración del perfil con versión y evento
 
 **Verificado con Docker (24/11/2026)**
-- [x] 55 pruebas en verde: arranque completo, migraciones V1 a V12, F1 en CO y en JP con PostgreSQL real
+- [x] **F2 (P1)**: access token de 15 minutos con claim `region` validado, refresh tokens con rotación, detección de reuso y revocación (logout, cambio de contraseña, bloqueo y borrado), CORS y Swagger con Bearer
+- [x] 64 pruebas en verde: arranque completo, migraciones V1 a V13, F1 en CO y en JP, flujo de sesión de F2, con PostgreSQL real
 
 **Pendiente de confirmar por el equipo**
 - [ ] Valores marcados `VERIFICAR` en `region_profiles`, `region_tax_rules`, `region_holidays` y precios de `category_prices`, con fuentes oficiales vigentes
@@ -388,7 +392,7 @@ La siguiente migración libre es `V13`.
 
 El orden y los criterios de terminado están en [`documento.md`](documento.md):
 
-- **F2** seguridad distribuida (CORS, refresh tokens, claim `region`, RS256)
+- **F2 (P2)** RS256 con JWKS y límite de intentos de login con Redis
 - **F3** multi-módulo Maven, 5 cores regionales, RabbitMQ con Outbox, subsistemas
 - **F4** pedidos y saga · **F5** pagos · **F6** asignación y seguimiento · **F7** notificaciones
 - **F8** facturación y calificaciones · **F9** frontend · **F10** observabilidad · **F11** pruebas de falla y de localización

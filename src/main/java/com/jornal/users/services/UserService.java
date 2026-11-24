@@ -40,6 +40,7 @@ public class UserService implements UserApi {
     private final RegionApi regionApi;
     private final AddressService addressService;
     private final BusinessService businessService;
+    private final RefreshTokenService refreshTokens;
     private final Clock clock;
 
     /**
@@ -145,6 +146,7 @@ public class UserService implements UserApi {
             throw new ApiException(ErrorUser.USER006_SAME_PASSWORD);
         }
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        refreshTokens.revokeAllFor(user.getId());   // cierra las demás sesiones
     }
 
     @Transactional
@@ -152,6 +154,7 @@ public class UserService implements UserApi {
         User user = getOrThrow(id);
         if (user.getDeletedAt() == null) {
             user.setActive(false);
+            refreshTokens.revokeAllFor(user.getId());
             publishAccess(user);
         }
     }
@@ -209,6 +212,7 @@ public class UserService implements UserApi {
         user.setVerificationState(VerificationState.PENDING);
         user.setActive(false);
         user.setDeletedAt(clock.instant());
+        refreshTokens.revokeAllFor(user.getId());
         businessService.deleteOf(user.getId());
         addressService.deleteAllOf(user.getId());
     }

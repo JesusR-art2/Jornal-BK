@@ -21,10 +21,20 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.jornal.shared.JwtProperties;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -47,6 +57,43 @@ class SecurityRolesTest {
     @MockitoBean RegionService regionService;
     @MockitoBean AddressService addressService;
     @MockitoBean BusinessService businessService;
+
+    @Autowired JwtEncoder jwtEncoder;
+    @Autowired JwtProperties jwtProperties;
+
+    @Test
+    void tokenFromAnotherRegionIsRejected() throws Exception {
+        Instant now = Instant.now();
+        JwtClaimsSet claims = JwtClaimsSet.builder()
+                .issuer(jwtProperties.issuer()).issuedAt(now).expiresAt(now.plusSeconds(600))
+                .subject(UUID.randomUUID().toString())
+                .claim("role", "ADMIN").claim("region", "JP")
+                .build();
+        String foreign = jwtEncoder.encode(JwtEncoderParameters.from(
+                JwsHeader.with(MacAlgorithm.HS256).build(), claims)).getTokenValue();
+
+        mvc.perform(get("/admin/users").header("Authorization", "Bearer " + foreign))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void corsAllowsTheFrontendOriginOnly() throws Exception {
+        mvc.perform(options("/users/me")
+                        .header("Origin", "http://localhost:4200")
+                        .header("Access-Control-Request-Method", "PATCH")
+                        .header("Access-Control-Request-Headers", "Authorization, Accept-Language"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:4200"));
+        mvc.perform(options("/users/me")
+                        .header("Origin", "https://co.jornal.localhost")
+                        .header("Access-Control-Request-Method", "GET"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "https://co.jornal.localhost"));
+        mvc.perform(options("/users/me")
+                        .header("Origin", "https://evil.example")
+                        .header("Access-Control-Request-Method", "GET"))
+                .andExpect(status().isForbidden());
+    }
 
     @Test
     void businessRoutesOnlyForBusiness() throws Exception {
@@ -120,6 +167,6 @@ class SecurityRolesTest {
         user.setEmail(rol.name().toLowerCase() + "@example.test");
         user.setName("Test " + rol.name());
         user.setRol(rol);
-        return "Bearer " + jwtService.issue(user).accessToken();
+        return "Bearer " + jwtService.issue(user).value();
     }
 }

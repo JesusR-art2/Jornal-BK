@@ -40,6 +40,7 @@ class UserServiceTest {
     @Mock RegionApi regionApi;
     @Mock AddressService addressService;
     @Mock BusinessService businessService;
+    @Mock RefreshTokenService refreshTokens;
 
     static final Instant NOW = Instant.parse("2026-11-15T12:00:00Z");
 
@@ -48,7 +49,8 @@ class UserServiceTest {
     @BeforeEach
     void setUp() {
         service = new UserService(repository, mapper, passwordEncoder, events, countryRepository,
-                phoneNormalizer, regionApi, addressService, businessService, Clock.fixed(NOW, ZoneOffset.UTC));
+                phoneNormalizer, regionApi, addressService, businessService, refreshTokens,
+                Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -69,6 +71,7 @@ class UserServiceTest {
         assertThat(user.getDeletedAt()).isEqualTo(NOW);
         verify(addressService).deleteAllOf(id);
         verify(businessService).deleteOf(id);
+        verify(refreshTokens).revokeAllFor(id);
 
         ArgumentCaptor<UserAccessChangedEvent> captor = ArgumentCaptor.forClass(UserAccessChangedEvent.class);
         verify(events).publishEvent(captor.capture());

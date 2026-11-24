@@ -1,16 +1,16 @@
 package com.jornal.users.services;
 
 import com.jornal.shared.ApiException;
-import com.jornal.users.dto.LoginRequest;
-import com.jornal.users.dto.TokenResponse;
 import com.jornal.users.User;
 import com.jornal.users.UserRepository;
+import com.jornal.users.dto.LoginRequest;
+import com.jornal.users.dto.TokenResponse;
 import com.jornal.users.enums.ErrorUser;
 import jakarta.annotation.PostConstruct;
-import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -19,27 +19,51 @@ public class AuthService {
     private final UserRepository repository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final RefreshTokenService refreshTokens;
 
     private String dummyHash;
 
     @PostConstruct
-    void init(){
+    void init() {
         dummyHash = passwordEncoder.encode("jornal-dummy-password");
     }
 
-    @Transactional(readOnly = true)
-    public TokenResponse login(LoginRequest request){
+    @Transactional
+    public TokenResponse login(LoginRequest request) {
         User user = repository.findByEmail(request.email()).orElse(null);
 
-        //se compara siempre con un hash exista o no el usuario para que el tiempo de respuesta no revele emails
-
+        // Se compara siempre con un hash, exista o no el usuario, para que el tiempo de respuesta no revele emails.
         String hash = user != null ? user.getPasswordHash() : dummyHash;
-        boolean passwordOk = passwordEncoder.matches(request.password(),hash);
+        boolean passwordOk = passwordEncoder.matches(request.password(), hash);
 
-        if (user == null || !passwordOk || !user.isActive()){
+        if (user == null || !passwordOk || !user.isActive()) {
             throw new ApiException(ErrorUser.USER003_INVALID_CREDENTIALS);
         }
-        return jwtService.issue(user);
+        return tokens(user, refreshTokens.issue(user.getId()));
+    }
+
+    /** Rota el refresh token y emite un access token nuevo. Una cuenta bloqueada o borrada no renueva. */
+    @Transactional(noRollbackFor = ApiException.class)
+    public TokenResponse refresh(String refreshToken) {
+        RefreshTokenService.Rotation rotation = refreshTokens.rotate(refreshToken);
+        User user = repository.findById(rotation.userId())
+                .filter(u -> u.isActive() && u.getDeletedAt() == null)
+                .orElse(null);
+        if (user == null) {
+            refreshTokens.revokeAllFor(rotation.userId());
+            throw new ApiException(ErrorUser.AUTH001_INVALID_REFRESH_TOKEN);
+        }
+        return tokens(user, rotation.next());
+    }
+
+    @Transactional
+    public void logout(String refreshToken) {
+        refreshTokens.revokeFamily(refreshToken);
+    }
+
+    private TokenResponse tokens(User user, RefreshTokenService.Issued refresh) {
+        JwtService.AccessToken access = jwtService.issue(user);
+        return new TokenResponse(access.value(), "Bearer", access.expiresIn(),
+                refresh.token(), refresh.expiresInSeconds());
     }
 }
-

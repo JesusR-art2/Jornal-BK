@@ -5,9 +5,12 @@ jornal:
   security:
     jwt:
       issuer: jornal
-      expiration-minutes: 60
+      expiration-minutes: 15        # access token corto; se renueva con POST /auth/refresh
     refresh:
       ttl: 30d
+  cors:
+    # Orígenes del frontend (lista separada por comas). Admite patrones con *.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200,https://*.jornal.localhost}
   admin:
     email: ${ADMIN_EMAIL:}
     password: ${ADMIN_PASSWORD:}
