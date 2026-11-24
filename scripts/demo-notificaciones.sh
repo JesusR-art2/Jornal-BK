@@ -40,6 +40,8 @@ wait_status() {
 }
 
 STAMP=$(date +%s)
+source "$(dirname "$0")/lib.sh"
+retire_demo_workers   # un solo trabajador disponible: el de esta demo
 ADMIN=$(login "admin@co.jornal.test" "$ADMIN_PASSWORD")
 
 step "1. Trabajador (app en inglés) y cliente (app en español)"

@@ -37,6 +37,8 @@ wait_status() {
 }
 
 STAMP=$(date +%s)
+source "$(dirname "$0")/lib.sh"
+retire_demo_workers   # un solo trabajador disponible: el de esta demo
 ADMIN=$(login "admin@co.jornal.test" "$ADMIN_PASSWORD")
 
 step "1. Trabajador verificado y disponible"
@@ -89,4 +91,4 @@ for _ in $(seq 1 20); do
 done
 curl -sf "$API/requests/$REQUEST" -H "Authorization: Bearer $CLIENT" | jq -c '{status, paymentCaptured, totalMinor, currency}'
 curl -sf "$GW/subsystems/payments/payments?requestId=$REQUEST" | jq -c '[.ledger[] | {kind, amount_minor}]'
-[ "$CAPTURED" = "true" ] && echo "   OK: pago capturado y liquidado (el comprobante y COMPLETED llegan con facturación, F8)"
+[ "$CAPTURED" = "true" ] && echo "   OK: pago capturado y liquidado (con el comprobante de facturación el pedido pasa a COMPLETED)"

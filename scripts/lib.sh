@@ -36,9 +36,28 @@ register() {   # register <email> <nombre> <rol> [idioma] [teléfono]
 }
 admin_token() { login "admin@$REGION.jornal.test" "$ADMIN_PASSWORD"; }
 
+# Retira de servicio a los trabajadores ficticios de demos anteriores (worker-*@example.test): el administrador
+# les quita la verificación y quedan no disponibles. Así cada demo tiene un único candidato y no espera 45 s por
+# oferta a trabajadores que nadie maneja. Solo toca usuarios de demostración.
+retire_demo_workers() {
+  local admin ids page=0
+  admin=$(admin_token)
+  while :; do
+    ids=$(curl -sf "$API/admin/users?rol=WORKER&size=100&page=$page" -H "Authorization: Bearer $admin" \
+      | jq -r '.items[] | select(.verificationState == "VERIFIED") | select(.email | test("^worker-.*@example\\.test$")) | .id')
+    for id in $ids; do
+      send PATCH "$API/admin/users/$id/verification" "$admin" '{"state":"PENDING"}' > /dev/null || true
+    done
+    local pages; pages=$(curl -sf "$API/admin/users?rol=WORKER&size=100&page=$page" -H "Authorization: Bearer $admin" | jq -r '.totalPages')
+    [ $((page + 1)) -ge "${pages:-1}" ] && break
+    page=$((page + 1))
+  done
+}
+
 # Trabajador verificado, con categoría de bodega, ubicación base y disponible. Deja WORKER, WORKER_ID, CATEGORY.
 new_worker() {
   local stamp="$1" base_lat="${2:-4.6700}"
+  retire_demo_workers
   local admin; admin=$(admin_token)
   WORKER_EMAIL="worker-$stamp@example.test"
   WORKER_ID=$(register "$WORKER_EMAIL" "Luis" WORKER)

@@ -3,7 +3,7 @@
 Plataforma tipo Uber para que personas, tiendas o empresas soliciten un ayudante o trabajador para una tarea puntual, sin contrato formal (trabajo informal por jornal). El backend está pensado como un **monolito modular** que pueda evolucionar a un sistema distribuido.
 
 > **Estado:** MVP en desarrollo. Última actualización: 24 de noviembre de 2026.
-> Existen la infraestructura, la seguridad con JWT y los módulos `region`, `users`, `catalog` y `workers`. El plan por fases para llevarlo a sistema distribuido está en [`documento.md`](documento.md) y el estado de partida en [`docs/ESTADO-ACTUAL.md`](docs/ESTADO-ACTUAL.md). Fases cerradas: **F0 (correcciones)**, **F1 (perfil regional y localización)**, **F2 P1 (sesión segura)**, **F3 (procesos, regiones e infraestructura)**, **F4 (pedidos y saga)**, **F5 (pagos)**, **F6 (asignación y seguimiento)** **F7 (notificaciones y tiempo real)** y **F8 (facturación, tasas de cambio y calificaciones)**.
+> Existen la infraestructura, la seguridad con JWT y los módulos `region`, `users`, `catalog` y `workers`. El plan por fases para llevarlo a sistema distribuido está en [`documento.md`](documento.md) y el estado de partida en [`docs/ESTADO-ACTUAL.md`](docs/ESTADO-ACTUAL.md). Fases cerradas: **F0 (correcciones)**, **F1 (perfil regional y localización)**, **F2 P1 (sesión segura)**, **F3 (procesos, regiones e infraestructura)**, **F4 (pedidos y saga)**, **F5 (pagos)**, **F6 (asignación y seguimiento)**, **F7 (notificaciones y tiempo real)**, **F8 (facturación, tasas de cambio y calificaciones)** y **F10 (observabilidad y consola)**.
 
 ---
 
@@ -95,6 +95,8 @@ scripts/demo-mensajeria.sh co                                                   
 scripts/demo-pagos.sh                                                            # pedido real: autoriza, anula y rechazo simulado
 scripts/demo-asignacion.sh                                                       # pedido real: oferta, aceptación, seguimiento y captura
 scripts/demo-notificaciones.sh                                                   # avisos en el idioma de cada persona y correos en Mailpit
+scripts/demo-facturacion.sh                                                      # pedido hasta COMPLETED, comprobante, calificaciones y reporte en USD
+scripts/demo-observabilidad.sh                                                   # id de correlación en los logs, Prometheus, Grafana y consola con un servicio caído
 docker compose -f infra/docker-compose.yml --profile full down                   # apagar (conserva datos)
 ```
 
@@ -106,7 +108,7 @@ docker compose -f infra/docker-compose.yml --profile full down                  
 | RabbitMQ (consola) | `http://localhost:15673` (jornal / jornal-dev-password) |
 | Mailpit (correos de los avisos) | `http://localhost:8025` |
 | WebSocket de avisos (STOMP) | `ws://localhost:8000/subsystems/notifications/ws` (JWT en el CONNECT) |
-| Prometheus / Grafana | `http://localhost:9090` / `http://localhost:3000` (admin / admin) |
+| Prometheus / Grafana | `http://localhost:9090` / `http://localhost:3000` (admin / admin; tablero «Jornal: sistema distribuido» en la carpeta Jornal) |
 | PostgreSQL | `localhost:55432` (bases `jornal_co` ... `jornal_jp` y una por subsistema) |
 
 Administrador de cada región: `admin@{co,br,us,fr,jp}.jornal.test` / `Admin12345`. Si una región está apagada, el gateway responde `503 SERVICE_UNAVAILABLE` solo para ella. Cada JVM corre con `-Xmx256m` (unos 420 MB por core).
@@ -466,6 +468,37 @@ Los vouchers se dan por pagados solos a los 10 s y vencen a los 90 s, por debajo
 
 **Outbox de los subsistemas** (`jornal-common`): `SubsystemOutbox` guarda el mensaje en la tabla `outbox` en la misma transacción y `OutboxRelay` lo envía cada segundo (`FOR UPDATE SKIP LOCKED`, sirve con réplicas). Si RabbitMQ cae, los mensajes esperan.
 
+### Observabilidad y consola
+
+- **Id de correlación:** el gateway pone `X-Correlation-Id`, o respeta el que manda el cliente. Cada proceso lo guarda en el MDC y lo escribe en cada línea de log (`[cid=...]`), lo devuelve en la respuesta y lo pone como `correlationid` en cada mensaje. Los consumidores lo recuperan del mensaje. Para seguir un pedido en todos los procesos: `docker compose -f infra/docker-compose.yml logs | grep "cid=<id>"`.
+- **Métricas para Prometheus** (todos los procesos exponen `/actuator/prometheus` solo dentro de la red interna; el gateway responde 404 a `/actuator/**` salvo la salud):
+
+  | Métrica | Etiquetas | Qué mide |
+  |---|---|---|
+  | `jornal_requests` | `status`, `region` | Pedidos por estado (se refresca cada 15 s) |
+  | `jornal_dispatch_assignment_time_seconds` | `region` | Tiempo desde que se pide trabajador hasta la aceptación (histograma) |
+  | `jornal_dispatch_assignment_failed_total` | `region`, `reason` | Pedidos sin trabajador |
+  | `jornal_payments_failures_total` | `region`, `method`, `reason` | Pagos rechazados o vouchers vencidos |
+  | `jornal_messages_total` | `consumer`, `type`, `region`, `outcome` (`ok`, `duplicate`, `error`) | Mensajes procesados, descartados por el inbox y fallidos (cada reintento cuenta) |
+  | `rabbitmq_detailed_queue_messages` | `queue` | Profundidad de cada cola (plugin de Prometheus de RabbitMQ) |
+
+- **Grafana:** tablero «Jornal: sistema distribuido» provisionado desde `infra/grafana/dashboards/jornal.json`. Muestra:
+  - servicios arriba o caídos;
+  - pedidos por estado y región;
+  - p50 y p95 de asignación;
+  - fallas de pago;
+  - asignaciones fallidas;
+  - mensajes;
+  - colas y mensajes muertos.
+- **Consola del administrador** (ADMIN de la región):
+
+  | Ruta | Descripción |
+  |---|---|
+  | `GET /admin/console` | Todo junto: tablero, `down` (servicios caídos), salud de cada servicio y colas |
+  | `GET /admin/console/dashboard` | Pedidos por estado, creados, completados y cancelados hoy (en la zona del país) y trabajadores disponibles |
+  | `GET /admin/console/services` | Salud de cada servicio de `CONSOLE_SERVICES` (`nombre=url` separados por coma); un servicio que no responde en 2 s aparece `DOWN` |
+  | `GET /admin/console/queues` | Colas de RabbitMQ (API de gestión, `RABBITMQ_API`): mensajes, sin confirmar, consumidores, colas sin consumidor y mensajes muertos |
+
 ## Migraciones
 
 | Versión | Contenido |
@@ -554,7 +587,9 @@ La siguiente migración libre del core es `V18`. Los subsistemas usan `jornal-co
 - [x] **F6**: subsistema de asignación con proyección de trabajadores (`jornal.worker.updated.v1`), candidatos por categoría, radio y disponibilidad ordenados por distancia, carga del día y calificación, ofertas secuenciales con plazo, reserva atómica, posición en vivo en Redis GEO con TTL por el exchange no durable `jornal.live` y seguimiento para el cliente
 - [x] **F7**: subsistema de notificaciones con plantillas ICU MessageFormat en 5 idiomas (plurales CLDR) y la hora en la zona del destinatario; contacto pedido por REST al core de la región con reintento (`/internal/contacts`, token interno, cerrado en el gateway); avisos en la app por WebSocket STOMP (JWT en el CONNECT y permiso por tema), bandeja `/notifications/me`, correo a Mailpit, y SMS y push simulados; posición en vivo reenviada al tema del pedido
 - [x] **F8**: subsistema de facturación con comprobante por país (`receipt_type` del perfil), numeración consecutiva por región y tipo sin huecos, impuestos con su tasa, identificación fiscal del comercio, fecha en la zona del lugar, salida JSON y HTML imprimible en el idioma del país; calificaciones en ambos sentidos solo sobre `COMPLETED`; tasas de cambio (par, tasa, fuente y fecha) con proveedor simulado y carga manual, y reporte consolidado de ingresos en la moneda elegida
-- [x] 107 pruebas en verde (76 del core, 9 de pagos, 8 de asignación, 10 de notificaciones y 4 de facturación), con PostgreSQL, RabbitMQ y Redis reales
+- [x] **F10**: id de correlación de punta a punta (gateway, MDC en cada línea de log y `correlationid` de cada mensaje), métricas de pedidos por estado y región, tiempo de asignación, fallas de pago, mensajes y colas; tablero de Grafana provisionado; consola del administrador `/admin/console` con tablero de la región, salud de cada servicio y colas
+- [x] 110 pruebas en verde en una corrida completa (79 del core, 9 de pagos, 8 de asignación, 10 de notificaciones y 4 de facturación), con PostgreSQL, RabbitMQ y Redis reales
+- [x] Verificado en Docker (24/11/2026): `scripts/demo-observabilidad.sh` y, de nuevo tras F10, `demo-mensajeria`, `demo-pagos`, `demo-asignacion`, `demo-notificaciones` y `demo-facturacion`
 - [x] Verificado en Docker (24/11/2026): `scripts/demo-facturacion.sh` (pedido `COMPLETED` con `FE-00000001`, calificaciones y reporte en USD con la tasa COP/USD y su fecha; evidencia en `docs/evidencias`)
 - [x] Verificado en Docker (24/11/2026): `scripts/demo-notificaciones.sh` (pedido completo: el cliente recibe 6 avisos en español y el trabajador 5 en inglés, en la app y por correo en Mailpit)
 - [x] Verificado en Docker (24/11/2026): `scripts/demo-asignacion.sh` (pedido real ofrecido al trabajador a 1,3 km, aceptado, seguido en vivo hasta 0,2 km y capturado)
@@ -572,7 +607,7 @@ El orden y los criterios de terminado están en [`documento.md`](documento.md):
 
 - **F2 (P2)** RS256 con JWKS y límite de intentos de login con Redis
 - **F3 (pendiente menor)** TLS de desarrollo en el gateway (hoy HTTP en el puerto 8000)
-- **F8** facturación y calificaciones · **F9** frontend · **F10** observabilidad · **F11** pruebas de falla y de localización
+- **F9** frontend (plan en `documento.md`) · **F11** pruebas de falla y de localización
 
 ---
 

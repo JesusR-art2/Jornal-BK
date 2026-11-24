@@ -1,6 +1,6 @@
 # Jornal — Plan de desarrollo para Claude Code
 
-Fecha: 24/11/2026 (plan inicial) · Última actualización: 24/11/2026, con el avance hasta F8 y F10 en curso
+Fecha: 24/11/2026 (plan inicial) · Última actualización: 24/11/2026, con F0 a F8 y F10 cerradas
 
 ## Cómo usar este plan
 
@@ -22,7 +22,7 @@ Prioridades: P1 es imprescindible para la sustentación y P2 suma puntos si sobr
 
 ## Estado del avance (24/11/2026)
 
-El backend distribuido está construido hasta F8, y F10 está en curso. Todo está en la rama `avance-proyecto` de GitHub (`main` en GitHub sigue en el estado anterior a F0). La guía de uso, los endpoints y las migraciones están en el `README.md`.
+El backend distribuido está construido y verificado: F0 a F8 y F10 cerradas. Faltan F11 (pruebas de falla y de localización), F9 (frontend) y las tareas P2. Todo está en la rama `avance-proyecto` de GitHub (`main` en GitHub sigue en el estado anterior a F0). La guía de uso, los endpoints y las migraciones están en el `README.md`.
 
 | Fase | Estado | Commit | Cómo se verificó |
 | --- | --- | --- | --- |
@@ -37,10 +37,10 @@ El backend distribuido está construido hasta F8, y F10 está en curso. Todo est
 | F7. Notificaciones y tiempo real | Hecha | `470dc7b` | Avisos en el idioma de cada persona, WebSocket y Mailpit; `scripts/demo-notificaciones.sh` |
 | F8. Facturación, tasas y calificaciones | Hecha (P1 y P2) | `092c6ca` | Comprobante de los 5 países en pruebas; `scripts/demo-facturacion.sh` (pedido `COMPLETED`, `FE-00000001`, reporte en USD con tasa y fecha) |
 | F9. Frontend | No iniciada | — | Plan detallado en la sección F9; D11 por confirmar |
-| F10. Observabilidad y consola | En curso | `2c1366b` | Compila y pasan sus pruebas; falta cerrar la demostración en Docker |
+| F10. Observabilidad y consola | Hecha | ver `git log` | `ObservabilityIntegrationTest`; `scripts/demo-observabilidad.sh` (id de correlación en los logs de 4 procesos, Prometheus lee todos, tablero de Grafana, la consola señala billing caído) |
 | F11. Pruebas de falla y localización | No iniciada | — | Base lista: `scripts/lib.sh` deja evidencias en `docs/evidencias` |
 
-Pruebas automáticas: 107 en verde al cierre de F8 (76 del core, 9 de pagos, 8 de asignación, 10 de notificaciones y 4 de facturación), todas con PostgreSQL, RabbitMQ y Redis reales (Testcontainers). F10 agrega una prueba de integración de 3 casos en el core.
+Pruebas automáticas: 110 en verde en una corrida completa de `./mvnw test` (79 del core, 9 de pagos, 8 de asignación, 10 de notificaciones y 4 de facturación), todas con PostgreSQL, RabbitMQ y Redis reales (Testcontainers). Tras cerrar F10 se volvieron a correr en Docker las 6 demostraciones (`demo-mensajeria`, `demo-pagos`, `demo-asignacion`, `demo-notificaciones`, `demo-facturacion` y `demo-observabilidad`) y todas pasan.
 
 ### Cambios respecto al plan original
 
@@ -388,6 +388,22 @@ Una sola app Angular, móvil primero, con selector de país e idioma y una vista
 - **Trabajador:** perfil y disponibilidad (`/workers/me`), ofertas con cuenta regresiva (`/subsystems/dispatch/offers/me`, aceptar o rechazar), envío de ubicación cada 5 a 10 s (`PUT /subsystems/dispatch/locations/me`) y cambios de estado (`en-route`, `start`, `finish`).
 - **Administrador:** consola (`/admin/console`), usuarios y verificación, categorías con traducciones y precios, perfil regional, tasas y reporte de ingresos (`/subsystems/billing/admin/...`), más un enlace a Grafana.
 - **Despliegue:** carpeta `frontend/` en este repositorio. En desarrollo, `ng serve` con proxy al gateway (`localhost:8000`). En Docker, una imagen Nginx con el build que el gateway sirve en `/`; así la app y la API comparten origen y no hace falta CORS.
+- **Por qué el proxy es obligatorio en desarrollo:** los cores aceptan CORS desde `http://localhost:4200` (`CORS_ALLOWED_ORIGINS`), pero los subsistemas (asignación, notificaciones y facturación) no tienen CORS configurado. Si el navegador llama directo a `localhost:8000`, bloquea esas peticiones. Con el proxy de Angular, la app y la API quedan en el mismo origen. `frontend/proxy.conf.json`:
+  ```json
+  {
+    "/api":        { "target": "http://localhost:8000", "secure": false, "changeOrigin": true },
+    "/subsystems": { "target": "http://localhost:8000", "secure": false, "changeOrigin": true, "ws": true }
+  }
+  ```
+  Con `ng serve --proxy-config proxy.conf.json`, la app usa rutas relativas (`/api/co/...`, `/subsystems/...`). `ws: true` hace pasar el WebSocket.
+- **Siempre por el gateway:** nunca llamar a los puertos de cada servicio. Las rutas son `/api/{país}/...` para el core y `/subsystems/{payments|dispatch|notifications|billing}/...` para los subsistemas.
+- **Cabeceras de cada petición:**
+  - `Authorization: Bearer <accessToken>` (salvo registro, login, refresh y perfil regional);
+  - `Accept-Language` con el idioma elegido, para recibir los errores ya traducidos;
+  - `X-Correlation-Id` opcional, útil para buscar la petición en los logs;
+  - al crear un pedido, `Idempotency-Key` con un UUID generado en la app, el mismo si se reintenta.
+- **Errores:** el backend responde `ProblemDetail` con `code` estable (por ejemplo `REQ004_PAYMENT_METHOD_NOT_ALLOWED`), `detail` traducido y, en validaciones, `errors` por campo. La app muestra `detail` y usa `code` para decidir qué hacer.
+- **Guía del orden de las llamadas:** `scripts/lib.sh` y `scripts/demo-facturacion.sh` hacen con `curl` exactamente las peticiones que el frontend tiene que hacer en el flujo completo. Son la referencia más rápida, junto con Swagger (`/api/co/swagger-ui.html`).
 
 #### Metodología
 
@@ -435,7 +451,7 @@ Reglas de trabajo para el frontend:
 - Métricas: pedidos por estado y región, tiempo de asignación, fallas de pago, profundidad de colas y reintentos; un tablero de Grafana listo.
 - Endpoints de administración: tablero por región, salud de cada servicio y estado de las colas (API de gestión de RabbitMQ).
 
-- [ ] Terminado cuando la consola muestra el tablero por región y señala qué servicio está caído. En curso (`2c1366b`): API de consola, correlación, métricas y tablero de Grafana hechos; falta cerrar `scripts/demo-observabilidad.sh` en Docker y actualizar el README.
+- [x] Terminado cuando la consola muestra el tablero por región y señala qué servicio está caído. Hecho: `/admin/console` (tablero, servicios caídos y colas), id de correlación de punta a punta, métricas y tablero de Grafana; verificado con `scripts/demo-observabilidad.sh`.
 
 ### F11. Pruebas y evidencias (P1)
 
@@ -501,9 +517,7 @@ Por país, el script produce una fila con los 7 elementos de la sección 8: idio
 
 En orden. Cada paso cierra con pruebas en verde, README actualizado y su commit en `avance-proyecto`.
 
-1. **Cerrar F10:**
-   - correr `scripts/demo-observabilidad.sh` en Docker: el id de correlación en los logs de cada proceso, Prometheus leyendo los 5 cores y la consola señalando un servicio caído;
-   - documentar en el README las métricas, el tablero de Grafana y `/admin/console`.
+1. ~~**Cerrar F10**~~: hecho y verificado en Docker; documentado en el README (sección «Observabilidad y consola»).
 2. **F11, pruebas de falla y de localización:** los 8 scripts de la tabla de F11, cada uno con su evidencia en `docs/evidencias`. Incluye la prueba de localización con la hora fija y su salida en Markdown y CSV.
 3. **Confirmaciones del equipo,** necesarias antes de F9 y del informe:
    - D1: un solo nombre de producto;
@@ -519,7 +533,7 @@ En orden. Cada paso cierra con pruebas en verde, README actualizado y su commit 
    5. RS256 con JWKS (D10): una clave por región y los subsistemas validando con la clave pública del emisor.
    6. Carrito guardado (`DRAFT`).
    7. Réplica de la base en una región.
-6. **Unir a `main`:** cuando F10 y F11 estén cerradas, abrir un pull request de `avance-proyecto` a `main` y revisarlo en equipo.
+6. **Unir a `main`:** cuando F11 esté cerrada, abrir un pull request de `avance-proyecto` a `main` y revisarlo en equipo.
 7. **Informe:** pendientes fuera del código, según la sección de simplificaciones.
    - Las 7 simplificaciones del prototipo frente a producción.
    - IPv6, DNS y DHCP.
@@ -542,6 +556,21 @@ En orden. Cada paso cierra con pruebas en verde, README actualizado y su commit 
 - Credenciales de desarrollo: administrador por región `admin@{co,br,us,fr,jp}.jornal.test` / `Admin12345`; RabbitMQ `jornal` / `jornal-dev-password` (consola en el puerto 15673); Grafana `admin` / `admin`; Mailpit en el puerto 8025.
 - Si el volumen de RabbitMQ viene de antes de F4, `docker compose -f infra/docker-compose.yml down -v` lo recrea. Ojo: borra los datos de ese entorno.
 - Las pruebas leen el secreto JWT de la configuración, porque algunas máquinas tienen la variable `JWT_SECRET` definida.
+- Mensaje sugerido para retomar con Claude Code en otro PC: «Lee `documento.md` y `README.md`. Estamos en la rama `avance-proyecto`. Sigue con los próximos pasos en orden, una fase a la vez, con pruebas en verde, README actualizado y un commit por fase». Esta conversación no viaja entre computadores: el documento es la guía.
+
+## Usuarios y datos de prueba
+
+- **Cada país tiene sus propios usuarios en su propia base** (`jornal_co`, `jornal_br`…). Un usuario de CO no puede iniciar sesión en BR: el token lleva el claim `region` y los demás cores lo rechazan con 401. El frontend debe elegir el país antes del login.
+- **Administradores:** se crean solos al arrancar Docker, uno por país: `admin@co.jornal.test`, `admin@br.jornal.test`, `admin@us.jornal.test`, `admin@fr.jornal.test` y `admin@jp.jornal.test`, todos con clave `Admin12345` (variable `ADMIN_PASSWORD`). En desarrollo con un solo core, el administrador sale de `ADMIN_EMAIL` y `ADMIN_PASSWORD` en el `.env`.
+- **Clientes, comercios y trabajadores** se registran con `POST /api/{país}/auth/register`, con rol `APPLICANT`, `BUSINESS` (exige el bloque `business` con identificación fiscal válida) o `WORKER`. `ADMIN` no se puede registrar.
+- **Un trabajador recibe pedidos solo si:**
+  1. un administrador lo verifica (`PATCH /admin/users/{id}/verification` con `{"state":"VERIFIED"}`);
+  2. tiene perfil con al menos una categoría y ubicación base (`PUT /workers/me`);
+  3. se pone disponible (`PATCH /workers/me/availability`).
+  Si le quitan la verificación, queda no disponible automáticamente.
+- **En otro PC la base arranca vacía de usuarios:** solo están los administradores, el catálogo con precios y los perfiles de país. Los datos viven en el volumen de Docker de cada PC; no se comparten ni se suben a GitHub, y `docker compose … down -v` los borra.
+- **Las demostraciones crean usuarios ficticios en cada corrida** (`client-<número>@example.test`, `worker-<número>@example.test`, clave `Clave12345`). Antes de crear su trabajador, `scripts/lib.sh` les quita la verificación a los trabajadores de demos anteriores (`retire_demo_workers`). Si no lo hiciera, el pedido nuevo se le ofrecería primero a trabajadores que nadie maneja y la demo esperaría 45 s por cada oferta.
+- **Pendiente útil para el frontend y la sustentación:** un `scripts/seed-demo.sh` que deje en cada país un cliente, un comercio y un trabajador verificado y disponible, con correos y claves fijos.
 
 ## Trazabilidad con el enunciado
 
@@ -563,7 +592,7 @@ Cada requisito del prototipo y de localización tiene una fase responsable; el d
 | Pago con medios del país y reembolso (4.6) | F5 | Hecho |
 | Notificaciones en idioma y zona de cada actor (4.7) | F7 | Hecho |
 | Comprobante del país (4.8) y calificaciones (4.9) | F8 | Hecho |
-| Consola de administración (4.10) | F9, F10 | API en curso (F10); falta la interfaz (F9) |
+| Consola de administración (4.10) | F9, F10 | API y Grafana hechos (F10); falta la interfaz (F9) |
 | UTF-8 en toda la cadena (4.1.1) | F3: codificación de bases, respuestas y mensajes | Hecho |
 | Textos fuera del código con respaldo (4.1.2) | F1, F9 | Hecho en el backend (errores, avisos y comprobantes en 5 idiomas) |
 | Formatos CLDR, dinero en enteros y tiempo en UTC (4.1.3 a 4.1.5) | D8, D9, F1, F4, F9 | Hecho en el backend |
