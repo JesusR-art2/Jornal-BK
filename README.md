@@ -336,8 +336,8 @@ La siguiente migración libre es `V10`.
 - [x] `workers`: perfil, categorías, disponibilidad con verificación, vista pública y reacción a eventos
 - [x] **F0**: correcciones del estado inicial (claim `role`, orden por `createdIn`, rutas `/me`, renombres de API, paquetes en minúscula, `Clock`, `V9`)
 
-**Pendiente de verificar con Docker**
-- [ ] `JornalBackendApplicationTests` (arranque completo con Testcontainers y migración `V9`)
+**Verificado con Docker (24/11/2026)**
+- [x] `JornalBackendApplicationTests`: arranque completo con Testcontainers, migraciones V1 a V9 y validación del esquema
 
 ---
 
