@@ -3,7 +3,7 @@
 Plataforma tipo Uber para que personas, tiendas o empresas soliciten un ayudante o trabajador para una tarea puntual, sin contrato formal (trabajo informal por jornal). El backend está pensado como un **monolito modular** que pueda evolucionar a un sistema distribuido.
 
 > **Estado:** MVP en desarrollo. Última actualización: 24 de noviembre de 2026.
-> Existen la infraestructura, la seguridad con JWT y los módulos `region`, `users`, `catalog` y `workers`. El plan por fases para llevarlo a sistema distribuido está en [`documento.md`](documento.md) y el estado de partida en [`docs/ESTADO-ACTUAL.md`](docs/ESTADO-ACTUAL.md). Fases cerradas: **F0 (correcciones)**, **F1 (perfil regional y localización)**, **F2 P1 (sesión segura)**, **F3 (procesos, regiones e infraestructura)**, **F4 (pedidos y saga)**, **F5 (pagos)**, **F6 (asignación y seguimiento)** y **F7 (notificaciones y tiempo real)**.
+> Existen la infraestructura, la seguridad con JWT y los módulos `region`, `users`, `catalog` y `workers`. El plan por fases para llevarlo a sistema distribuido está en [`documento.md`](documento.md) y el estado de partida en [`docs/ESTADO-ACTUAL.md`](docs/ESTADO-ACTUAL.md). Fases cerradas: **F0 (correcciones)**, **F1 (perfil regional y localización)**, **F2 P1 (sesión segura)**, **F3 (procesos, regiones e infraestructura)**, **F4 (pedidos y saga)**, **F5 (pagos)**, **F6 (asignación y seguimiento)** **F7 (notificaciones y tiempo real)** y **F8 (facturación, tasas de cambio y calificaciones)**.
 
 ---
 
@@ -367,6 +367,8 @@ Si la cuenta deja de ser elegible (desverificada, desactivada o eliminada), `Wor
 | `POST /requests/{id}/cancel` | cliente (hasta `ASSIGNED`) o ADMIN (incidencias) | Cancela con compensación de pago |
 | `POST /requests/{id}/en-route`, `/start`, `/finish` | WORKER asignado | `ASSIGNED → EN_ROUTE → IN_PROGRESS → PENDING_CONFIRMATION` |
 | `POST /requests/{id}/confirm` | cliente | Pide la captura del pago; se confirma solo a las 24 h (`REQUESTS_AUTO_CONFIRM_AFTER`) |
+| `POST /requests/{id}/rating` | cliente o trabajador del pedido | Solo en `COMPLETED`: `{"score": 1-5, "comment"}`, una vez por sentido (409 `REQ011_NOT_COMPLETED` o `REQ012_ALREADY_RATED`). La del cliente actualiza el promedio del trabajador y su foto en asignación |
+| `GET /requests/{id}/ratings` | participantes o ADMIN | Calificaciones del pedido en ambos sentidos |
 | `GET /admin/requests?status=` | ADMIN | Todos los pedidos de la región |
 
 Cuerpo de cotizar y crear (`RequestDraft`): `categoryId`, `units` (1 a 30), `scheduledLocal` (`2026-11-15T20:30`) y `timezone` (una zona permitida del país; por defecto la del perfil), `address` (campos del país), `latitude`, `longitude`, `paymentMethod` (del perfil), `tipMinor` o `tipPercent`, `notes`. La hora se guarda en UTC con la zona IANA del lugar; el lugar, además, como punto PostGIS.
@@ -421,6 +423,22 @@ Consume `jornal.request.status-changed.v1` (cliente y trabajador del pedido) y `
 | `GET /deliveries?requestId=` | interna (demostración) | Entregas del pedido por canal y estado, sin correo ni teléfono |
 | `ws: /ws` | JWT en el CONNECT | WebSocket STOMP |
 
+### Billing (subsistema `jornal-billing`): comprobantes, tasas y reporte
+
+Consume `jornal.payment.captured.v1` (que trae los datos del pedido: líneas, impuestos con su tasa, tipo y prefijo de comprobante del perfil, idioma del país e identificación fiscal del comercio) y responde `jornal.billing.receipt-issued.v1`; con eso y la captura el core cierra el pedido en `COMPLETED`.
+
+- **Comprobante por país** (`receipt_type` del perfil): `DIAN_E_INVOICE` (CO, `FE-`), `NFS_E` (BR, `NFSE-`), `SALES_RECEIPT` (US, `RCPT-`), `FACTURE` (FR, `FA-`) y `QUALIFIED_INVOICE` (JP, `INV-`). Numeración consecutiva por región y tipo (`receipt_sequences`, dentro de la transacción: sin huecos). Emisor por región en configuración (datos ficticios, `VERIFICAR`). Tabla `receipts` particionada por región.
+- **Presentación**: montos con CLDR y la escala de la moneda del perfil, impuesto con su tasa e indicación de incluido o sumado, fecha y hora en la zona del lugar del trabajo, textos en el idioma del país (o `?lang=`).
+- **Tasas de cambio** (P2): par, tasa, fuente y fecha. `RateProvider` es la interfaz del proveedor real; `SimulatedRateProvider` carga tasas de referencia contra USD al arrancar y cada día. El administrador puede cargar la tasa oficial a mano. La conversión usa la tasa directa, la inversa o la cruzada por USD, y el reporte dice cuál.
+
+| Ruta (gateway: `/subsystems/billing/...`) | Acceso | Descripción |
+|---|---|---|
+| `GET /receipts/{requestId}?lang=` | cliente, trabajador del pedido o ADMIN | Comprobante en JSON con los valores ya formateados |
+| `GET /receipts/{requestId}/html?lang=` | ídem | Comprobante en HTML imprimible |
+| `GET /admin/receipts?region=` | ADMIN | Últimos comprobantes |
+| `GET /admin/rates`, `POST /admin/rates/refresh`, `POST /admin/rates` | ADMIN | Ver, cargar del proveedor o cargar a mano (`base`, `quote`, `rate`, `source`, `asOf`) |
+| `GET /admin/reports/revenue?currency=USD&from=&to=` | ADMIN | Ingresos por región en moneda local y convertidos, con la tasa usada (par, tasa, fuente, fecha y método) |
+
 ### Payments (subsistema `jornal-payments`)
 
 Consume `jornal.request.created/repriced/capture-requested/cancelled` de la cola `payments.<región>` y responde con `jornal.payment.*` por su outbox. El flujo lo elige el medio de pago del perfil regional:
@@ -468,8 +486,9 @@ Los vouchers se dan por pagados solos a los 10 s y vencen a los 90 s, por debajo
 | `V14__event_publication` | Outbox: tabla `event_publication` de Spring Modulith (esquema v2) |
 | `V15__requests` | `service_requests` (con punto PostGIS generado), `request_lines`, `request_status_history`, `inbox` del core y `shedlock` |
 | `V16__worker_base_location` | Ubicación base del trabajador (`base_latitude`, `base_longitude`) |
+| `V17__request_ratings` | `request_ratings`: una calificación por pedido y sentido (1 a 5) |
 
-La siguiente migración libre del core es `V17`. Los subsistemas usan `jornal-common/.../db/subsystem` (V1: `inbox` y `region_profile_cache`; V2: `outbox`) y sus migraciones propias empiezan en `V100` (pagos, asignación y notificaciones).
+La siguiente migración libre del core es `V18`. Los subsistemas usan `jornal-common/.../db/subsystem` (V1: `inbox` y `region_profile_cache`; V2: `outbox`) y sus migraciones propias empiezan en `V100` (pagos, asignación, notificaciones y facturación).
 
 ## Mensajería entre procesos
 
@@ -534,7 +553,9 @@ La siguiente migración libre del core es `V17`. Los subsistemas usan `jornal-co
 - [x] **F5**: subsistema de pagos con interfaz `PaymentGateway` y adaptadores simulados por flujo (autorizar y capturar, cobrar y reembolsar, voucher asíncrono), idempotencia por pedido e intento, libro de movimientos con liquidación, tablas particionadas por región, simulador configurable en caliente y outbox de subsistemas
 - [x] **F6**: subsistema de asignación con proyección de trabajadores (`jornal.worker.updated.v1`), candidatos por categoría, radio y disponibilidad ordenados por distancia, carga del día y calificación, ofertas secuenciales con plazo, reserva atómica, posición en vivo en Redis GEO con TTL por el exchange no durable `jornal.live` y seguimiento para el cliente
 - [x] **F7**: subsistema de notificaciones con plantillas ICU MessageFormat en 5 idiomas (plurales CLDR) y la hora en la zona del destinatario; contacto pedido por REST al core de la región con reintento (`/internal/contacts`, token interno, cerrado en el gateway); avisos en la app por WebSocket STOMP (JWT en el CONNECT y permiso por tema), bandeja `/notifications/me`, correo a Mailpit, y SMS y push simulados; posición en vivo reenviada al tema del pedido
-- [x] 103 pruebas en verde (76 del core, 9 de pagos, 8 de asignación y 10 de notificaciones), con PostgreSQL, RabbitMQ y Redis reales
+- [x] **F8**: subsistema de facturación con comprobante por país (`receipt_type` del perfil), numeración consecutiva por región y tipo sin huecos, impuestos con su tasa, identificación fiscal del comercio, fecha en la zona del lugar, salida JSON y HTML imprimible en el idioma del país; calificaciones en ambos sentidos solo sobre `COMPLETED`; tasas de cambio (par, tasa, fuente y fecha) con proveedor simulado y carga manual, y reporte consolidado de ingresos en la moneda elegida
+- [x] 107 pruebas en verde (76 del core, 9 de pagos, 8 de asignación, 10 de notificaciones y 4 de facturación), con PostgreSQL, RabbitMQ y Redis reales
+- [x] Verificado en Docker (24/11/2026): `scripts/demo-facturacion.sh` (pedido `COMPLETED` con `FE-00000001`, calificaciones y reporte en USD con la tasa COP/USD y su fecha; evidencia en `docs/evidencias`)
 - [x] Verificado en Docker (24/11/2026): `scripts/demo-notificaciones.sh` (pedido completo: el cliente recibe 6 avisos en español y el trabajador 5 en inglés, en la app y por correo en Mailpit)
 - [x] Verificado en Docker (24/11/2026): `scripts/demo-asignacion.sh` (pedido real ofrecido al trabajador a 1,3 km, aceptado, seguido en vivo hasta 0,2 km y capturado)
 - [x] Verificado en Docker (24/11/2026): `scripts/demo-pagos.sh` (un pedido real se autoriza, se anula al cancelarlo y se rechaza con el simulador) y `scripts/demo-mensajeria.sh`

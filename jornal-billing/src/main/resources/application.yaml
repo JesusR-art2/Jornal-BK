@@ -21,12 +21,31 @@ spring:
           initial-interval: 1s
           multiplier: 2
   flyway:
-    locations: classpath:db/subsystem
+    locations: classpath:db/subsystem,classpath:db/migration
+  messages:
+    basename: receipts/labels
+    encoding: UTF-8
+    fallback-to-system-locale: false
 jornal:
   subsystem:
     name: billing
   messaging:
     regions: ${MESSAGING_REGIONS:co,br,us,fr,jp}
+  security:
+    jwt:
+      # Mismo secreto y emisor que los cores: el comprobante lo ven el cliente, el trabajador y el administrador.
+      issuer: ${JWT_ISSUER:jornal-dev}
+      secret: ${JWT_SECRET:dev-only-secret-change-me-minimum-32-bytes!!}
+  billing:
+    # Emisor (la plataforma) por región. Datos FICTICIOS de demostración: VERIFICAR antes de cualquier uso real.
+    issuers:
+      co: { name: "Jornal Colombia S.A.S. (ficticio)", tax-id: "NIT 900000000-0 (VERIFICAR)" }
+      br: { name: "Jornal Brasil Ltda. (fictício)", tax-id: "CNPJ 00.000.000/0001-00 (VERIFICAR)" }
+      us: { name: "Jornal US Inc. (fictitious)", tax-id: "EIN 00-0000000 (VERIFICAR)" }
+      fr: { name: "Jornal France SAS (fictif)", tax-id: "SIREN 000 000 000 (VERIFICAR)" }
+      jp: { name: "Jornal Japan K.K.（架空）", tax-id: "T0000000000000 (VERIFICAR)" }
+    rates:
+      refresh-cron: "0 0 6 * * *"   # proveedor simulado: una carga diaria (UTC)
 management:
   endpoints:
     web:

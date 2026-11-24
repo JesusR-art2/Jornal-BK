@@ -27,6 +27,7 @@ public class RequestController {
     private static final String CLIENT = "hasAnyRole('APPLICANT','BUSINESS')";
 
     private final RequestService requests;
+    private final com.jornal.requests.services.RatingService ratings;
 
     /** Cotiza el carrito sin guardar nada. */
     @PostMapping("/quote")
@@ -69,6 +70,20 @@ public class RequestController {
     public RequestResponse reprice(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
                                    @Valid @RequestBody RepriceRequest change) {
         return requests.reprice(actor(jwt), id, change);
+    }
+
+    /** Califica el pedido terminado: el cliente al trabajador o el trabajador al cliente (una vez por sentido). */
+    @PostMapping("/{id}/rating")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('APPLICANT','BUSINESS','WORKER')")
+    public RatingResponse rate(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
+                               @Valid @RequestBody RatingRequest body) {
+        return ratings.rate(actor(jwt), id, body);
+    }
+
+    @GetMapping("/{id}/ratings")
+    public List<RatingResponse> ratings(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        return ratings.of(actor(jwt), id);
     }
 
     @PostMapping("/{id}/cancel")

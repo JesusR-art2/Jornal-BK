@@ -14,7 +14,9 @@ public enum ErrorRequest implements ErrorCode {
     REQ007_NOT_ALLOWED(HttpStatus.FORBIDDEN, "You cannot perform this action on the request"),
     REQ008_IDEMPOTENCY_KEY_REQUIRED(HttpStatus.BAD_REQUEST, "The Idempotency-Key header is required"),
     REQ009_TIMEZONE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "Time zone %s is not valid for this country"),
-    REQ010_CLIENT_NOT_ACTIVE(HttpStatus.FORBIDDEN, "Your account cannot create requests");
+    REQ010_CLIENT_NOT_ACTIVE(HttpStatus.FORBIDDEN, "Your account cannot create requests"),
+    REQ011_NOT_COMPLETED(HttpStatus.CONFLICT, "Only completed requests can be rated"),
+    REQ012_ALREADY_RATED(HttpStatus.CONFLICT, "You already rated this request");
 
     private final HttpStatus status;
     private final String message;

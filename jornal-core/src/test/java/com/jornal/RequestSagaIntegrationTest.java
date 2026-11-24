@@ -94,7 +94,19 @@ class RequestSagaIntegrationTest {
 
         // El cliente confirma: se pide la captura; pagos captura y facturación emite el comprobante
         mvc.perform(post("/requests/{id}/confirm", id).header("Authorization", client)).andExpect(status().isOk());
-        await("payments.co", EventTypes.REQUEST_CAPTURE_REQUESTED, id);
+        CloudEvent capture = await("payments.co", EventTypes.REQUEST_CAPTURE_REQUESTED, id);
+        // F8: lo que facturación necesita viaja con la captura (tipo de comprobante del perfil y tasas)
+        assertThat(capture.data()).containsEntry("receiptType", "DIAN_E_INVOICE").containsEntry("receiptPrefix", "FE")
+                .containsEntry("regionLocale", "es-CO").containsKey("customerName");
+        assertThat(capture.data().get("taxRates").toString()).contains("IVA=1900");
+
+        // Antes de COMPLETED no se puede calificar
+        String rating = "{\"score\":5,\"comment\":\"Muy cumplido\"}";
+        mvc.perform(post("/requests/{id}/rating", id).header("Authorization", client)
+                        .contentType(MediaType.APPLICATION_JSON).content(rating))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("REQ011_NOT_COMPLETED"));
+
         reply(EventTypes.PAYMENT_CAPTURED, id, Map.of("attempt", 1));
         reply(EventTypes.BILLING_RECEIPT_ISSUED, id, Map.of("receiptNumber", "FE-000001"));
         awaitStatus(client, id, "COMPLETED");
@@ -104,6 +116,45 @@ class RequestSagaIntegrationTest {
                 .andExpect(jsonPath("$[0].to").value("PENDING_PAYMENT"))
                 .andExpect(jsonPath("$[6].to").value("COMPLETED"))
                 .andExpect(jsonPath("$[6].actor").value("billing"));
+
+        // F8: calificaciones en ambos sentidos, una vez por sentido
+        mvc.perform(put("/workers/me").header("Authorization", worker.token()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bio\":\"Bodega\",\"workRadiusKm\":10,\"categoryIds\":[\"%s\"]}"
+                                .formatted(categoryId("warehouse"))))
+                .andExpect(status().isOk());
+        mvc.perform(post("/requests/{id}/rating", id).header("Authorization", client)
+                        .contentType(MediaType.APPLICATION_JSON).content(rating))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.direction").value("CLIENT_TO_WORKER"))
+                .andExpect(jsonPath("$.rateeId").value(worker.id()));
+        mvc.perform(post("/requests/{id}/rating", id).header("Authorization", client)
+                        .contentType(MediaType.APPLICATION_JSON).content(rating))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("REQ012_ALREADY_RATED"));
+        mvc.perform(post("/requests/{id}/rating", id).header("Authorization", worker.token())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"score\":4}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.direction").value("WORKER_TO_CLIENT"));
+        mvc.perform(post("/requests/{id}/rating", id).header("Authorization", token("WORKER"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"score\":1}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/requests/{id}/ratings", id).header("Authorization", client))
+                .andExpect(jsonPath("$.length()").value(2));
+        // El promedio del trabajador se actualiza y su foto sale hacia asignación
+        CloudEvent snapshot = awaitWorker(worker.id());
+        assertThat(snapshot.data()).containsEntry("ratingCount", 1);
+    }
+
+    private CloudEvent awaitWorker(String workerId) {
+        long deadline = System.currentTimeMillis() + 15_000;
+        while (System.currentTimeMillis() < deadline) {
+            CloudEvent e = rabbit.receiveAndConvert("dispatch.co", 300, EVENT);
+            if (e != null && EventTypes.WORKER_UPDATED.equals(e.type()) && workerId.equals(e.subject())
+                    && Integer.valueOf(1).equals(e.data().get("ratingCount"))) {
+                return e;
+            }
+        }
+        throw new AssertionError("No rated worker snapshot for " + workerId);
     }
 
     @Test

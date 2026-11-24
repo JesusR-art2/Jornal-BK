@@ -50,7 +50,7 @@ class UserServiceTest {
     void setUp() {
         service = new UserService(repository, mapper, passwordEncoder, events, countryRepository,
                 phoneNormalizer, regionApi, addressService, businessService, refreshTokens,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC), org.mockito.Mockito.mock(com.jornal.users.BusinessProfileRepository.class));
     }
 
     @Test

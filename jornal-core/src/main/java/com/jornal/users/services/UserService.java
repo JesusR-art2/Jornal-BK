@@ -42,6 +42,7 @@ public class UserService implements UserApi {
     private final BusinessService businessService;
     private final RefreshTokenService refreshTokens;
     private final Clock clock;
+    private final com.jornal.users.BusinessProfileRepository businessProfiles;
 
     /**
      * Registra un usuario en la región de esta instancia. Todo lo que depende del país (teléfono, orden del
@@ -236,6 +237,14 @@ public class UserService implements UserApi {
                 .map(u -> new UserSummary(u.getId(), u.getName(), u.getRol(),
                         u.getVerificationState() == VerificationState.VERIFIED,
                         u.getCountryCode(), u.getLocale()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<FiscalIdentity> fiscalIdentityOf(UUID id) {
+        return repository.findById(id).map(u -> businessProfiles.findById(id)
+                .map(b -> new FiscalIdentity(u.getName(), b.getLegalName(), b.getTaxIdType(), b.getTaxIdNumber()))
+                .orElseGet(() -> new FiscalIdentity(u.getName(), null, null, null)));
     }
 
     private void publishAccess(User user) {

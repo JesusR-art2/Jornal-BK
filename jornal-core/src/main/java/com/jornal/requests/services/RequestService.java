@@ -5,6 +5,7 @@ import com.jornal.catalog.CategoryPriceSummary;
 import com.jornal.region.PaymentMethod;
 import com.jornal.region.RegionApi;
 import com.jornal.region.RegionProfileView;
+import com.jornal.region.RegionProfileView;
 import com.jornal.requests.*;
 import com.jornal.requests.dto.*;
 import com.jornal.requests.enums.ErrorRequest;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.*;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -233,7 +235,26 @@ public class RequestService {
         if (r.getConfirmedAt() != null) return;   // ya confirmado: idempotente
         r.setConfirmedAt(clock.instant());
         r.setUpdatedAt(clock.instant());
-        transitions.emit(r, EventTypes.REQUEST_CAPTURE_REQUESTED, transitions.paymentData(r));
+        // Lleva además lo que facturación necesita para el comprobante (llega con payment.captured)
+        Map<String, Object> data = new HashMap<>(transitions.paymentData(r));
+        data.put("categoryName", r.getCategoryName());
+        data.put("units", r.getUnits());
+        data.put("addressText", r.getAddressText());
+        data.put("scheduledAt", r.getScheduledAt().toString());
+        data.put("confirmedAt", r.getConfirmedAt().toString());
+        RegionProfileView profile = regionApi.current();
+        data.put("receiptType", profile.receiptType());
+        data.put("receiptPrefix", profile.receiptPrefix());
+        data.put("regionLocale", profile.defaultLocale());
+        data.put("taxRates", profile.taxRules().stream().collect(java.util.stream.Collectors.toMap(
+                t -> t.name(), t -> t.rateBps(), (a, b) -> a)));
+        userApi.fiscalIdentityOf(r.getClientId()).ifPresent(f -> {
+            data.put("customerName", f.name());
+            data.put("customerLegalName", f.legalName());
+            data.put("customerTaxIdType", f.taxIdType());
+            data.put("customerTaxIdNumber", f.taxIdNumber());
+        });
+        transitions.emit(r, EventTypes.REQUEST_CAPTURE_REQUESTED, data);
     }
 
     public void cancelWithCompensation(ServiceRequest r, Actor actor, String reason) {
