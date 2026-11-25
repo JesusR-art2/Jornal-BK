@@ -28,7 +28,12 @@ public class NotificationService {
     public enum Channel { IN_APP, PUSH, EMAIL, SMS }
 
     /** Avisos urgentes que además van por SMS. */
-    private static final Set<String> SMS_TEMPLATES = Set.of("offer", "status.ASSIGNED", "status.EN_ROUTE");
+    private static final Set<String> SMS_TEMPLATES = Set.of("offer", "status.ASSIGNED", "status.EN_ROUTE",
+            "vacancy.SELECTED");
+
+    /** Avisos con botón en la app: la plantilla elige la acción que el frontend muestra. */
+    private static final Map<String, String> ACTIONS = Map.of("vacancy.SELECTED", "CONFIRM_ATTENDANCE",
+            "vacancy.published", "VIEW_VACANCY");
 
     private final Templates templates;
     private final ContactClient contacts;
@@ -87,10 +92,65 @@ public class NotificationService {
                 instant(data.get("scheduledAt")));
     }
 
+    /** Vacante nueva: aviso emergente solo a los trabajadores cercanos que calculó el core. */
+    public void onVacancyPublished(CloudEvent event) {
+        Map<String, Object> data = event.data();
+        if (!(data.get("nearbyWorkers") instanceof List<?> nearby)) {
+            return;
+        }
+        UUID vacancyId = uuid(data.get("vacancyId"));
+        for (Object item : nearby) {
+            if (!(item instanceof Map<?, ?> worker)) continue;
+            Map<String, Object> args = vacancyArgs(data);
+            args.put("distance", worker.get("distanceKm") instanceof Number n ? n : 0);
+            notify(event, "vacancy.published", "worker", uuid(worker.get("workerId")), vacancyId, args,
+                    instant(data.get("startsAt")), instant(data.get("endsAt")));
+        }
+    }
+
+    /** Cambio de una postulación: avisa al trabajador o al empleador según la plantilla que exista. */
+    public void onVacancyApplicationChanged(CloudEvent event) {
+        Map<String, Object> data = event.data();
+        String template = "vacancy." + data.get("status");
+        UUID vacancyId = uuid(data.get("vacancyId"));
+        Map<String, Object> args = vacancyArgs(data);
+        Instant startsAt = instant(data.get("startsAt"));
+        Instant endsAt = instant(data.get("endsAt"));
+        notify(event, template, "worker", uuid(data.get("workerId")), vacancyId, args, startsAt, endsAt);
+        notify(event, template, "employer", uuid(data.get("employerId")), vacancyId, args, startsAt, endsAt);
+        // La app del empleador refresca la lista de candidatos sin consultar
+        websocket.convertAndSend(RequestTopics.user(uuid(data.get("employerId"))),
+                (Object) Map.of("type", "vacancy-application", "vacancyId", vacancyId.toString(),
+                        "applicationId", text(data.get("applicationId")), "status", text(data.get("status"))));
+    }
+
+    private static Map<String, Object> vacancyArgs(Map<String, Object> data) {
+        Map<String, Object> args = new HashMap<>();
+        args.put("title", text(data.get("title")));
+        args.put("address", text(data.get("addressText")));
+        String items = text(data.get("items"));
+        args.put("items", items.isBlank() ? "none" : items);
+        args.put("worker", text(data.get("workerName")));
+        args.put("justification", text(data.get("justification")));
+        String note = text(data.get("paymentNote"));
+        args.put("note", note.isBlank() ? "none" : note);
+        args.put("currency", text(data.get("currency")));
+        Object paid = data.get("paidAmountMinor") != null ? data.get("paidAmountMinor") : data.get("payoutMinor");
+        int scale = data.get("moneyScale") instanceof Number s ? s.intValue() : 0;
+        args.put("amount", paid instanceof Number n
+                ? java.math.BigDecimal.valueOf(n.longValue()).movePointLeft(scale) : java.math.BigDecimal.ZERO);
+        return args;
+    }
+
     // ------------------------------------------------------------------ entrega
 
     private void notify(CloudEvent event, String template, String audience, UUID recipientId, UUID requestId,
                         Map<String, Object> baseArgs, Instant scheduledAt) {
+        notify(event, template, audience, recipientId, requestId, baseArgs, scheduledAt, null);
+    }
+
+    private void notify(CloudEvent event, String template, String audience, UUID recipientId, UUID requestId,
+                        Map<String, Object> baseArgs, Instant scheduledAt, Instant untilAt) {
         String key = template + "." + audience;
         if (recipientId == null || !templates.exists(key)) {
             return;   // ese cambio no se le avisa a esta audiencia
@@ -105,6 +165,7 @@ public class NotificationService {
         ZoneId zone = ZoneId.of(contact.timezone());
         Map<String, Object> args = new HashMap<>(baseArgs);
         args.put("when", scheduledAt == null ? "" : templates.when(scheduledAt, locale, zone));
+        args.put("until", untilAt == null ? "" : templates.when(untilAt, locale, zone));
         Templates.Rendered message = templates.render(key, locale, args).orElseThrow();
 
         for (Channel channel : channelsOf(template)) {
@@ -130,6 +191,8 @@ public class NotificationService {
                 payload.put("id", id.toString());
                 payload.put("requestId", requestId == null ? null : requestId.toString());
                 payload.put("template", template);
+                payload.put("action", ACTIONS.get(template));
+                payload.put("vacancyId", template.startsWith("vacancy.") && requestId != null ? requestId.toString() : null);
                 payload.put("title", message.title());
                 payload.put("body", message.body());
                 payload.put("createdAt", clock.instant().toString());

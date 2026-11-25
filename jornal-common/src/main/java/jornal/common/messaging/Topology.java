@@ -31,7 +31,7 @@ public final class Topology {
     /** Prefijos de tipo que consume cada proceso (sin región). "#" = todo. */
     private static final Map<String, List<String>> SUBSCRIPTIONS = Map.of(
             CORE, List.of("jornal.payment.#", "jornal.dispatch.#", "jornal.billing.#"),
-            "payments", List.of("jornal.request.#", "jornal.region.#"),
+            "payments", List.of("jornal.request.#", "jornal.region.#", "jornal.vacancy.payout-requested.#"),
             "dispatch", List.of("jornal.request.#", "jornal.region.#", "jornal.worker.#"),
             "notifications", List.of("#"),
             "billing", List.of("jornal.payment.#", "jornal.region.#"));

@@ -30,6 +30,32 @@ public class WorkerService implements WorkerApi {
         return repository.countByAvailableTrue();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<NearbyWorker> findNearby(double latitude, double longitude, int limit) {
+        return repository.findWithinRadius(latitude, longitude, Math.clamp(limit, 1, 5000)).stream()
+                .map(row -> new NearbyWorker(UUID.fromString(row[0].toString()),
+                        Math.round(((Number) row[1]).doubleValue() / 100.0) / 10.0))
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Double> distanceKm(UUID workerId, double latitude, double longitude) {
+        return repository.findById(workerId)
+                .filter(p -> p.getBaseLatitude() != null && p.getBaseLongitude() != null)
+                .map(p -> haversineKm(p.getBaseLatitude(), p.getBaseLongitude(), latitude, longitude));
+    }
+
+    private static double haversineKm(double lat1, double lon1, double lat2, double lon2) {
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.pow(Math.sin(dLat / 2), 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.pow(Math.sin(dLon / 2), 2);
+        double km = 6371.0 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return Math.round(km * 10.0) / 10.0;
+    }
+
     private final WorkerProfileRepository repository;
     private final WorkerProfileMapper mapper;
     private final UserApi userApi;

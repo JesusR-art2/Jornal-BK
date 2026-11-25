@@ -11,7 +11,8 @@ import java.util.Set;
 @Component
 public class NotificationEventsHandler implements CloudEventHandler {
 
-    private static final Set<String> TYPES = Set.of(EventTypes.REQUEST_STATUS_CHANGED, EventTypes.DISPATCH_OFFER_CREATED);
+    private static final Set<String> TYPES = Set.of(EventTypes.REQUEST_STATUS_CHANGED, EventTypes.DISPATCH_OFFER_CREATED,
+            EventTypes.VACANCY_PUBLISHED, EventTypes.VACANCY_APPLICATION_CHANGED);
 
     private final NotificationService notifications;
 
@@ -29,6 +30,8 @@ public class NotificationEventsHandler implements CloudEventHandler {
         switch (event.type()) {
             case EventTypes.REQUEST_STATUS_CHANGED -> notifications.onStatusChanged(event);
             case EventTypes.DISPATCH_OFFER_CREATED -> notifications.onOfferCreated(event);
+            case EventTypes.VACANCY_PUBLISHED -> notifications.onVacancyPublished(event);
+            case EventTypes.VACANCY_APPLICATION_CHANGED -> notifications.onVacancyApplicationChanged(event);
             default -> { }
         }
     }

@@ -24,9 +24,12 @@ public class CoreEventsListener {
 
     private final Inbox inbox;
     private final RequestSaga saga;
+    private final com.jornal.vacancies.VacancyPaymentEvents vacancyPayments;
     private final MeterRegistry metrics;
 
-    public CoreEventsListener(Inbox inbox, RequestSaga saga, ObjectProvider<MeterRegistry> metrics) {
+    public CoreEventsListener(Inbox inbox, RequestSaga saga, com.jornal.vacancies.VacancyPaymentEvents vacancyPayments,
+                              ObjectProvider<MeterRegistry> metrics) {
+        this.vacancyPayments = vacancyPayments;
         this.inbox = inbox;
         this.saga = saga;
         this.metrics = metrics.getIfAvailable();
@@ -42,7 +45,11 @@ public class CoreEventsListener {
                 return;
             }
             try {
-                saga.handle(event);
+                if (vacancyPayments.supports(event.type())) {
+                    vacancyPayments.handle(event.type(), event.data());
+                } else {
+                    saga.handle(event);
+                }
             } catch (RuntimeException e) {
                 MessageMetrics.record(metrics, "core", event, "error");
                 throw e;

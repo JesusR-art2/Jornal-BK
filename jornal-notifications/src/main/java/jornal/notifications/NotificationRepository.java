@@ -64,7 +64,11 @@ public class NotificationRepository {
     /** Bandeja de la app: avisos IN_APP del usuario, el más reciente primero. */
     public List<Map<String, Object>> inbox(UUID recipientId, int limit) {
         return jdbc.queryForList("""
-                SELECT id, request_id AS "requestId", template, subject AS title, body, locale,
+                SELECT id, request_id AS "requestId",
+                       CASE WHEN template LIKE 'vacancy.%' THEN request_id END AS "vacancyId",
+                       CASE template WHEN 'vacancy.SELECTED' THEN 'CONFIRM_ATTENDANCE'
+                                     WHEN 'vacancy.published' THEN 'VIEW_VACANCY' END AS action,
+                       template, subject AS title, body, locale,
                        created_at AS "createdAt", read_at AS "readAt"
                   FROM notifications
                  WHERE recipient_id = ? AND channel = 'IN_APP'

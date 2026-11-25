@@ -399,6 +399,33 @@ Cuerpo de cotizar y crear (`RequestDraft`): `categoryId`, `units` (1 a 30), `sch
 
 Cada cambio emite además `jornal.request.status-changed.v1` (notificaciones). Las respuestas de un intento de pago viejo, tardías o duplicadas se ignoran. Plazos (`RequestTimeouts`, una sola instancia con ShedLock): sin respuesta de pagos en 2 min → `CANCELLED`; la hora pasa sin trabajador → `EXPIRED` con compensación; sin confirmación en 24 h → se confirma solo. Concurrencia: versión optimista (`@Version`); un choque devuelve 409 `CONCURRENT_UPDATE` en la API y se reintenta en los mensajes.
 
+### Vacancies (vacantes de trabajo temporal)
+
+La empresa (APPLICANT o BUSINESS) publica una vacante; los trabajadores cuyo radio de trabajo (desde su ubicación base) alcanza el lugar reciben un aviso emergente; los trabajadores se postulan; la empresa elige a varios hasta completar los cupos; cada elegido confirma asistencia desde el botón del aviso; y, después de la hora de fin, la empresa cierra a cada persona: **Finalizar** (pasa al formato de pago) o **Cancelar** con motivo y justificación (no se paga).
+
+| Endpoint | Rol | Descripción |
+|---|---|---|
+| `POST /vacancies` | APPLICANT, BUSINESS | `{title, description, categoryId?, items[], startLocal, endLocal, timezone?, positions, payMinor, address{}, latitude, longitude}`. Pago por persona en unidad menor y moneda del país. Publica `jornal.vacancy.published.v1` con los trabajadores cercanos |
+| `GET /vacancies?maxDistanceKm=` | todos | Vacantes abiertas (sin empezar), la más próxima primero. Al trabajador le agrega `distanceKm` y `myApplication` |
+| `GET /vacancies/{id}` | todos (el empleador solo las suyas) | Lugar, implementos (`items`), inicio y fin, qué hay que hacer (`description`), cupos y ocupados |
+| `POST /vacancies/{id}/apply` | WORKER | `{message?}`. 409 `VAC006_ALREADY_APPLIED`, `VAC005_NOT_OPEN` |
+| `POST /vacancies/{id}/withdraw` | WORKER | Retira la postulación o el compromiso antes de que empiece |
+| `POST /vacancies/{id}/attendance` | WORKER | Botón «¿Puedes asistir?»: `{attending: true}` → `CONFIRMED`; `false` → `DECLINED` (libera el cupo y la vacante vuelve a `OPEN`) |
+| `GET /vacancies/applications/mine` | WORKER | Mis postulaciones, horario y estado del pago |
+| `GET /vacancies/mine?status=&pendingClosure=` | APPLICANT, BUSINESS | Mis vacantes; `pendingClosure=true` lista las ya terminadas con personas por cerrar |
+| `GET /vacancies/{id}/applications?status=` | dueño o ADMIN | Candidatos ordenados por `score` (calificación 50 %, trabajos finalizados 30 %, cercanía 15 %, verificado 5 %); `status=CONFIRMED` = quienes se comprometieron |
+| `POST /vacancies/{id}/selections` | dueño | `{applicationIds: [...]}` contrata a varios a la vez (409 `VAC009_NO_SLOTS` si superan los cupos) |
+| `POST /vacancies/{id}/applications/{appId}/complete` | dueño | Tras la hora de fin: `COMPLETED`, `payoutMinor` = pago por persona, `payoutStatus=PENDING` (409 `VAC010_NOT_ENDED` antes) |
+| `POST /vacancies/{id}/applications/{appId}/cancel` | dueño | Tras la hora de fin: `{reason: NO_SHOW\|ABANDONED\|OTHER, justification}` → `CANCELLED`, sin pago |
+| `GET /vacancies/settings` · `PUT /vacancies/settings` | APPLICANT, BUSINESS | Configuración del empleador: `{autoPayout: true|false}` (botón activo/inactivo). Por defecto, pago a mano |
+| `GET /vacancies/payouts?status=PENDING|PROCESSING|PAID|FAILED` | APPLICANT, BUSINESS | Formato de pago: personas que terminaron trabajos de mis vacantes |\|PAID` | APPLICANT, BUSINESS | Formato de pago: personas que terminaron trabajos de mis vacantes |
+| `POST /vacancies/{id}/applications/{appId}/paid` | dueño | Pago a mano: `{amountMinor, justification}`. Si paga menos de lo que dice la vacante, la justificación es obligatoria (400 `VAC014_JUSTIFICATION_REQUIRED`). También sirve para pagar a mano un pago automático `FAILED` (409 `VAC015` mientras está `PROCESSING`) |
+| `POST /vacancies/{id}/cancel` | dueño | Retira la vacante antes de que empiece (avisa a los elegidos) |
+
+**Pago automático:** con `autoPayout` activo, solo el botón «Finalizar» lo dispara: la postulación queda `PROCESSING` y el core envía `jornal.vacancy.payout-requested.v1` al subsistema de pagos, que hace la transferencia (simulada, una por postulación) y responde `jornal.payment.payout-completed.v1` (→ `PAID`) o `payout-failed.v1` (→ `FAILED`, el empleador recibe aviso y puede pagar a mano). Cancelar nunca paga. Para la demo, `PAYOUT` en `declineMethods` del simulador hace fallar el pago.
+
+Estados: vacante `OPEN → FILLED ⇄ OPEN → CLOSED` (o `CANCELLED`); postulación `APPLIED → SELECTED → CONFIRMED → COMPLETED | CANCELLED`, con `DECLINED`, `WITHDRAWN` y `NOT_SELECTED`. Cada cambio publica `jornal.vacancy.application-changed.v1`; notificaciones avisa con la plantilla `vacancy.<estado>.<worker|employer>`. Los avisos de la bandeja (`GET /notifications/me`) y del WebSocket traen `vacancyId` y `action`: `VIEW_VACANCY` (vacante cercana) o `CONFIRM_ATTENDANCE` (botón de asistencia).
+
 ### Dispatch (subsistema `jornal-dispatch`): asignación y seguimiento
 
 Consume `jornal.worker.updated.v1` (foto del trabajador que publica el core al cambiar su perfil, disponibilidad o verificación), `jornal.request.assignment-requested.v1`, `jornal.request.cancelled.v1` y `jornal.request.status-changed.v1`.
@@ -579,8 +606,10 @@ Con las 5 regiones, Alemania se suma con `--profile full --profile de`. Lo prueb
 | `V16__worker_base_location` | Ubicación base del trabajador (`base_latitude`, `base_longitude`) |
 | `V17__request_ratings` | `request_ratings`: una calificación por pedido y sentido (1 a 5) |
 | `V18__germany` | Sexto país solo con datos: Alemania (perfil de-DE y EUR, dirección, USt, medios de pago, documentos y feriados 2026, catálogo en alemán y precios en euros) |
+| `V19__vacancies` | `vacancies` (punto PostGIS generado), `vacancy_items` (implementos) y `vacancy_applications` (postulación, cierre con justificación y formato de pago) |
+| `V20__vacancy_payouts` | `employer_settings` (pago automático activo/inactivo) y en `vacancy_applications` modo de pago, monto pagado, justificación, referencia y falla |
 
-La siguiente migración libre del core es `V19`. Los subsistemas usan `jornal-common/.../db/subsystem` (V1: `inbox` y `region_profile_cache`; V2: `outbox`) y sus migraciones propias empiezan en `V100` (pagos, asignación, notificaciones y facturación).
+La siguiente migración libre del core es `V21`. Los subsistemas usan `jornal-common/.../db/subsystem` (V1: `inbox` y `region_profile_cache`; V2: `outbox`) y sus migraciones propias empiezan en `V100` (pagos, asignación, notificaciones y facturación).
 
 ## Mensajería entre procesos
 

@@ -47,6 +47,25 @@ class TemplatesTest {
     }
 
     @Test
+    void selectedWorkerGetsPlaceTimeAndItems() {
+        Map<String, Object> args = new HashMap<>();
+        args.put("title", "Auxiliar de bodega");
+        args.put("address", "Calle 26");
+        args.put("when", "jueves 8:00");
+        args.put("until", "jueves 16:00");
+        args.put("items", "Botas, Guantes");
+        String body = templates.render("vacancy.SELECTED.worker", Locale.forLanguageTag("es-CO"), args)
+                .orElseThrow().body();
+        assertThat(body).contains("Calle 26").contains("jueves 8:00").contains("Lleva: Botas, Guantes.")
+                .contains("¿Puedes asistir?");
+        args.put("items", "none");
+        assertThat(templates.render("vacancy.SELECTED.worker", Locale.forLanguageTag("es-CO"), args)
+                .orElseThrow().body()).contains("No necesitas llevar implementos.");
+        assertThat(templates.exists("vacancy.CONFIRMED.employer")).isTrue();
+        assertThat(templates.exists("vacancy.CONFIRMED.worker")).isFalse();
+    }
+
+    @Test
     void unknownLanguageFallsBackToEnglish() {
         assertThat(body("de-DE", 2)).startsWith("New job: Bodega");
     }

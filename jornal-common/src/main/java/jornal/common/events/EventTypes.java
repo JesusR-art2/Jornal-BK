@@ -22,6 +22,14 @@ public final class EventTypes {
     /** Pedido cancelado: pagos anula o reembolsa y asignación libera la reserva. */
     public static final String REQUEST_CANCELLED = "jornal.request.cancelled.v1";
 
+    /** Vacante publicada: lleva los trabajadores cercanos ({@code nearbyWorkers}) para el aviso emergente. */
+    public static final String VACANCY_PUBLISHED = "jornal.vacancy.published.v1";
+    /** Cambio de una postulación (elegido, confirmó, declinó, finalizado, cancelado...): notificaciones avisa. */
+    public static final String VACANCY_APPLICATION_CHANGED = "jornal.vacancy.application-changed.v1";
+
+    /** Comando para pagos: pagar al trabajador que el empleador finalizó (pago automático activo). */
+    public static final String VACANCY_PAYOUT_REQUESTED = "jornal.vacancy.payout-requested.v1";
+
     /** Foto completa del trabajador (perfil, disponibilidad, elegibilidad) para la proyección de asignación. */
     public static final String WORKER_UPDATED = "jornal.worker.updated.v1";
 
@@ -31,6 +39,9 @@ public final class EventTypes {
     public static final String PAYMENT_CAPTURED = "jornal.payment.captured.v1";
     public static final String PAYMENT_VOIDED = "jornal.payment.voided.v1";
     public static final String PAYMENT_REFUNDED = "jornal.payment.refunded.v1";
+    /** Pago automático al trabajador de una vacante: hecho o fallido. */
+    public static final String PAYMENT_PAYOUT_COMPLETED = "jornal.payment.payout-completed.v1";
+    public static final String PAYMENT_PAYOUT_FAILED = "jornal.payment.payout-failed.v1";
 
     // ---- asignación
     public static final String DISPATCH_WORKER_ASSIGNED = "jornal.dispatch.worker-assigned.v1";
