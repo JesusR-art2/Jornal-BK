@@ -1,6 +1,6 @@
 # Jornal — Plan de desarrollo para Claude Code
 
-Fecha: 24/11/2026 (plan inicial) · Última actualización: 24/11/2026, con F0 a F8 y F10 cerradas
+Fecha: 24/11/2026 (plan inicial) · Última actualización: 24/11/2026, con F0 a F8, F10 y F11 cerradas
 
 ## Cómo usar este plan
 
@@ -22,7 +22,7 @@ Prioridades: P1 es imprescindible para la sustentación y P2 suma puntos si sobr
 
 ## Estado del avance (24/11/2026)
 
-El backend distribuido está construido y verificado: F0 a F8 y F10 cerradas. Faltan F11 (pruebas de falla y de localización), F9 (frontend) y las tareas P2. Todo está en la rama `avance-proyecto` de GitHub (`main` en GitHub sigue en el estado anterior a F0). La guía de uso, los endpoints y las migraciones están en el `README.md`.
+El backend distribuido está construido y verificado: F0 a F8, F10 y F11 cerradas. Faltan F9 (frontend) y las tareas P2. Todo está en la rama `avance-proyecto` de GitHub (`main` en GitHub sigue en el estado anterior a F0). La guía de uso, los endpoints y las migraciones están en el `README.md`.
 
 | Fase | Estado | Commit | Cómo se verificó |
 | --- | --- | --- | --- |
@@ -38,7 +38,7 @@ El backend distribuido está construido y verificado: F0 a F8 y F10 cerradas. Fa
 | F8. Facturación, tasas y calificaciones | Hecha (P1 y P2) | `092c6ca` | Comprobante de los 5 países en pruebas; `scripts/demo-facturacion.sh` (pedido `COMPLETED`, `FE-00000001`, reporte en USD con tasa y fecha) |
 | F9. Frontend | No iniciada | — | Plan detallado en la sección F9; D11 por confirmar |
 | F10. Observabilidad y consola | Hecha | ver `git log` | `ObservabilityIntegrationTest`; `scripts/demo-observabilidad.sh` (id de correlación en los logs de 4 procesos, Prometheus lee todos, tablero de Grafana, la consola señala billing caído) |
-| F11. Pruebas de falla y localización | No iniciada | — | Base lista: `scripts/lib.sh` deja evidencias en `docs/evidencias` |
+| F11. Pruebas de falla y localización | Hecha | ver `git log` | Los 7 scripts `falla-*.sh` y `prueba-localizacion.sh` pasan en Docker y dejan su evidencia en `docs/evidencias`; `scripts/seed-demo.sh` deja usuarios fijos por país |
 
 Pruebas automáticas: 110 en verde en una corrida completa de `./mvnw test` (79 del core, 9 de pagos, 8 de asignación, 10 de notificaciones y 4 de facturación), todas con PostgreSQL, RabbitMQ y Redis reales (Testcontainers). Tras cerrar F10 se volvieron a correr en Docker las 6 demostraciones (`demo-mensajeria`, `demo-pagos`, `demo-asignacion`, `demo-notificaciones`, `demo-facturacion` y `demo-observabilidad`) y todas pasan.
 
@@ -86,7 +86,7 @@ Once decisiones fijan el rumbo; cuatro necesitan confirmación del equipo (o del
 | D1 | Un solo nombre de producto en código, informe y presentación (hoy: Jornal en el código, Chambas en el informe, «trabajos temporales» en las diapositivas) | El profesor evalúa coherencia entre informe, prototipo y sustentación | Por confirmar |
 | D2 | Cliente = APPLICANT (persona); comercio = nuevo rol BUSINESS (tienda o empresa que contrata, con identificación fiscal y factura a su nombre); repartidor = WORKER; administrador = ADMIN | Jornal ya define al solicitante como «personas, tiendas o empresas»; cubre los 4 actores con el menor cambio. Alternativa más costosa: comercio como proveedor de materiales (aliado comercial del informe) | Tomada (24/11/2026) |
 | D3 | Países: CO, BR, US, FR y JP; JP entra por migración e IT queda deshabilitado | Las tablas 3.1 a 3.3 del enunciado y el informe usan Japón | Tomada |
-| D4 | Pedido de prueba equivalente: 2 unidades de una categoría (por ejemplo, 2 jornadas de bodega) + 1 recargo de desplazamiento + propina | Conserva la estructura del caso «dos almuerzos, un domicilio y una propina»: subtotal, domicilio, impuesto, propina y total | Por confirmar |
+| D4 | Pedido de prueba equivalente: 2 jornadas de bodega + 1 recargo de desplazamiento + propina | Conserva la estructura del caso «dos almuerzos, un domicilio y una propina»: subtotal, domicilio, impuesto, propina y total | Tomada (24/11/2026) |
 | D5 | 5 cores regionales (mismo jar, `APP_REGION` distinto, base de datos propia) + 4 subsistemas independientes (Pagos, Asignación, Notificaciones, Facturación) + RabbitMQ + gateway | Cumple 7.1 y 7.3 sin levantar 25 JVM en un portátil | Tomada |
 | D6 | Middleware: RabbitMQ (AMQP 0-9-1) con la externalización de eventos de Spring Modulith y su registro de publicaciones en JPA como Outbox | Es lo que declara el informe; Modulith permite pasar a Kafka por configuración | Tomada |
 | D7 | Asignación por oferta automática secuencial: se ofrece al mejor candidato con tiempo límite y, si no acepta, al siguiente | Resuelve la decisión abierta del roadmap y cumple «proximidad, disponibilidad y balanceo de carga» | Tomada |
@@ -472,7 +472,7 @@ Scripts previstos, uno por prueba de falla, que corren solos contra el sistema e
 
 Para la prueba de localización, la forma más confiable de fijar las 20:30 del 15/11/2026 sin romper la sesión (el token también depende del reloj) es una prueba automática del core con `Clock` fijo que use los 5 perfiles reales de la base, `PricingService`, los validadores y los formatos CLDR, y escriba el informe en `docs/evidencias`; el script la ejecuta. Las capturas del carrito y del comprobante en los 5 idiomas llegan con Playwright en F9.
 
-- [ ] Terminado cuando los scripts de falla y de localización corren sin intervención y dejan sus evidencias en `docs/evidencias`.
+- [x] Terminado cuando los scripts de falla y de localización corren sin intervención y dejan sus evidencias en `docs/evidencias`. Hecho: los 8 scripts pasan en Docker (24/11/2026). La réplica de pagos se cae con `docker kill` y RabbitMQ reentrega a la otra lo que no alcanzó a confirmar; la prueba de localización usa el pedido D4 confirmado (2 jornadas de bodega + desplazamiento + propina).
 
 ## Pruebas de falla y de localización
 
@@ -518,10 +518,10 @@ Por país, el script produce una fila con los 7 elementos de la sección 8: idio
 En orden. Cada paso cierra con pruebas en verde, README actualizado y su commit en `avance-proyecto`.
 
 1. ~~**Cerrar F10**~~: hecho y verificado en Docker; documentado en el README (sección «Observabilidad y consola»).
-2. **F11, pruebas de falla y de localización:** los 8 scripts de la tabla de F11, cada uno con su evidencia en `docs/evidencias`. Incluye la prueba de localización con la hora fija y su salida en Markdown y CSV.
+2. ~~**F11, pruebas de falla y de localización**~~: hecho y verificado en Docker; documentado en el README (sección «Pruebas de falla y de localización»).
 3. **Confirmaciones del equipo,** necesarias antes de F9 y del informe:
    - D1: un solo nombre de producto;
-   - D4: el pedido de prueba equivalente;
+   - ~~D4: el pedido de prueba equivalente~~ (tomada: 2 jornadas de bodega + desplazamiento + propina);
    - D11: Angular, Transloco y Leaflet;
    - los valores `VERIFICAR` de impuestos, festivos, precios de demostración, emisores ficticios por país y tasas de cambio simuladas, con su fuente oficial.
 4. **F9, frontend:** iteraciones I0 a I6 según la sección F9.
@@ -552,7 +552,7 @@ En orden. Cada paso cierra con pruebas en verde, README actualizado y su commit 
   docker compose -f infra/docker-compose.yml up -d --build --wait
   ```
   Agregar `--profile full` levanta las 5 regiones.
-- Demostraciones en `scripts/`: `demo-mensajeria`, `demo-pagos`, `demo-asignacion`, `demo-notificaciones`, `demo-facturacion` y `demo-observabilidad`.
+- Demostraciones en `scripts/`: `demo-mensajeria`, `demo-pagos`, `demo-asignacion`, `demo-notificaciones`, `demo-facturacion` y `demo-observabilidad`; pruebas de falla `falla-*.sh`, `prueba-localizacion.sh` y datos fijos `seed-demo.sh`.
 - Credenciales de desarrollo: administrador por región `admin@{co,br,us,fr,jp}.jornal.test` / `Admin12345`; RabbitMQ `jornal` / `jornal-dev-password` (consola en el puerto 15673); Grafana `admin` / `admin`; Mailpit en el puerto 8025.
 - Si el volumen de RabbitMQ viene de antes de F4, `docker compose -f infra/docker-compose.yml down -v` lo recrea. Ojo: borra los datos de ese entorno.
 - Las pruebas leen el secreto JWT de la configuración, porque algunas máquinas tienen la variable `JWT_SECRET` definida.
@@ -570,7 +570,7 @@ En orden. Cada paso cierra con pruebas en verde, README actualizado y su commit 
   Si le quitan la verificación, queda no disponible automáticamente.
 - **En otro PC la base arranca vacía de usuarios:** solo están los administradores, el catálogo con precios y los perfiles de país. Los datos viven en el volumen de Docker de cada PC; no se comparten ni se suben a GitHub, y `docker compose … down -v` los borra.
 - **Las demostraciones crean usuarios ficticios en cada corrida** (`client-<número>@example.test`, `worker-<número>@example.test`, clave `Clave12345`). Antes de crear su trabajador, `scripts/lib.sh` les quita la verificación a los trabajadores de demos anteriores (`retire_demo_workers`). Si no lo hiciera, el pedido nuevo se le ofrecería primero a trabajadores que nadie maneja y la demo esperaría 45 s por cada oferta.
-- **Pendiente útil para el frontend y la sustentación:** un `scripts/seed-demo.sh` que deje en cada país un cliente, un comercio y un trabajador verificado y disponible, con correos y claves fijos.
+- **Usuarios fijos para el frontend y la sustentación:** `scripts/seed-demo.sh` deja en cada región que esté arriba `cliente@<país>.jornal.test`, `comercio@<país>.jornal.test` y `trabajador@<país>.jornal.test` (verificado, con bodega, ubicación base y disponible), con la clave `Demo12345`. Las demos y pruebas de falla retiran a ese trabajador para tener un único candidato; después hay que volver a correr `seed-demo.sh`.
 
 ## Trazabilidad con el enunciado
 
@@ -582,7 +582,7 @@ Cada requisito del prototipo y de localización tiene una fase responsable; el d
 | Una sola base de código parametrizada (7.2, 12) | F1, F3 | Hecho |
 | Al menos 4 subsistemas por mensajes con middleware (7.3) | F3, F5 a F8 | Hecho: pagos, asignación, notificaciones y facturación |
 | Flujo completo del pedido en cada país (7.4) | F4 a F9 | Backend hecho por API; falta la interfaz (F9) |
-| Pruebas de falla y de localización (7.5, 7.6, 8) | F11 | Pendiente |
+| Pruebas de falla y de localización (7.5, 7.6, 8) | F11 | Hecho: 7 pruebas de falla y la de localización, con evidencias en `docs/evidencias` |
 | Repositorio con instrucciones y datos ficticios (7.7, 12) | F3 y README de cada fase | Hecho y al día hasta F8 |
 | Registro de los 4 actores con perfil regional (4.1) | F1, F2 | Hecho en la API |
 | Catálogo con precios por país y búsqueda por cercanía (4.2) | F1, F6 | Hecho |
@@ -600,7 +600,7 @@ Cada requisito del prototipo y de localización tiene una fase responsable; el d
 | Direcciones, teléfonos y orden del nombre (4.1.7) | F1 | Hecho |
 | Tipografía CJK y textos largos (4.1.8) | F9 | Pendiente (F9) |
 | Datos personales por país, consentimiento y supresión (4.1.10) | Base por región (F3); consentimiento y borrado seguro ya existen | Hecho; el contacto solo se consulta al core del país |
-| Transparencia, fiabilidad, escalabilidad y manejo de fallas (5) | Gateway y nombres (F3), saga (F4), pruebas (F11) | Hecho en el diseño; faltan las evidencias (F11) |
+| Transparencia, fiabilidad, escalabilidad y manejo de fallas (5) | Gateway y nombres (F3), saga (F4), pruebas (F11) | Hecho, con evidencias de F11 |
 | Rendimiento con caché (5) | P2: caché del catálogo en Redis con TTL | Pendiente (P2) |
 | Sexto país solo con configuración (5) | P2: demostración con Alemania | Pendiente (P2) |
 | Seguridad: autenticación, TLS, roles, abuso (5) | F2, gateway con TLS y límite de tasa (F3) | Roles, JWT y límite de tasa hechos; falta TLS y el límite de intentos de login (P2) |

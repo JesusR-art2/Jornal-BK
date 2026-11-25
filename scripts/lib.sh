@@ -36,15 +36,17 @@ register() {   # register <email> <nombre> <rol> [idioma] [teléfono]
 }
 admin_token() { login "admin@$REGION.jornal.test" "$ADMIN_PASSWORD"; }
 
-# Retira de servicio a los trabajadores ficticios de demos anteriores (worker-*@example.test): el administrador
-# les quita la verificación y quedan no disponibles. Así cada demo tiene un único candidato y no espera 45 s por
-# oferta a trabajadores que nadie maneja. Solo toca usuarios de demostración.
+# Retira de servicio a los trabajadores ficticios de demos anteriores (worker-*@example.test) y al de
+# scripts/seed-demo.sh (trabajador@<país>.jornal.test): el administrador les quita la verificación y quedan no
+# disponibles. Así cada demo tiene un único candidato y no espera 45 s por oferta a trabajadores que nadie maneja.
+# Solo toca usuarios de demostración; seed-demo.sh deja otra vez listo al suyo.
 retire_demo_workers() {
   local admin ids page=0
   admin=$(admin_token)
   while :; do
     ids=$(curl -sf "$API/admin/users?rol=WORKER&size=100&page=$page" -H "Authorization: Bearer $admin" \
-      | jq -r '.items[] | select(.verificationState == "VERIFIED") | select(.email | test("^worker-.*@example\\.test$")) | .id')
+      | jq -r '.items[] | select(.verificationState == "VERIFIED")
+               | select(.email | test("^(worker-.*@example\\.test|trabajador@[a-z]+\\.jornal\\.test)$")) | .id')
     for id in $ids; do
       send PATCH "$API/admin/users/$id/verification" "$admin" '{"state":"PENDING"}' > /dev/null || true
     done
@@ -115,6 +117,55 @@ finish_and_confirm() {
   for s in en-route start finish; do send POST "$API/requests/$1/$s" "$WORKER" > /dev/null; done
   send POST "$API/requests/$1/confirm" "$CLIENT" > /dev/null
 }
+
+# ------------------------------------------------------------------ pruebas de falla (F11)
+
+# warehouse_category <token>: id de la categoría de bodega. Deja CATEGORY.
+warehouse_category() { CATEGORY=$(curl -sf "$API/categories?q=warehouse" -H "Authorization: Bearer $1" | jq -r '.[0].id'); }
+
+# Pedidos del pago: payments_of <pedido>  -> número de pagos registrados
+payments_of() { curl -sf "$PAYMENTS/payments?requestId=$1" | jq '.payments | length'; }
+payment_status() { curl -sf "$PAYMENTS/payments?requestId=$1" | jq -r '.payments[0].status // "NINGUNO"'; }
+
+# Mensajes en una cola de RabbitMQ (listos + sin confirmar)
+queue_messages() { curl -sf -u "$RABBIT_AUTH" "$RABBIT_API/queues/%2F/$1" | jq '.messages // 0'; }
+
+# Estado de salud de un contenedor de Docker
+health_of() { docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$1" 2>/dev/null || echo missing; }
+
+# wait_healthy <servicio> [segundos]: espera a que todos los contenedores del servicio estén sanos
+wait_healthy() {
+  local service="$1" seconds="${2:-180}" ids all
+  for _ in $(seq 1 "$seconds"); do
+    ids=$($COMPOSE ps -q "$service" 2>/dev/null)
+    all=1
+    for id in $ids; do [ "$(health_of "$id")" = "healthy" ] || all=0; done
+    [ -n "$ids" ] && [ "$all" = 1 ] && { ok "$service sano"; return 0; }
+    sleep 1
+  done
+  fail "$service no quedó sano en $seconds s"
+}
+
+# wait_until <descripción> <segundos> <comando...>: espera a que el comando devuelva 0
+wait_until() {
+  local what="$1" seconds="$2"; shift 2
+  for _ in $(seq 1 "$seconds"); do
+    if "$@"; then ok "$what"; return 0; fi
+    sleep 1
+  done
+  fail "$what (no se cumplió en $seconds s)"
+}
+
+# Código HTTP de un GET
+http_code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
+
+# Veces que el pedido pasó a un estado (historial en la base de la región)
+transitions_to() {
+  psql_q "jornal_$REGION" "SELECT count(*) FROM request_status_history WHERE request_id = '$1' AND to_status = '$2'"
+}
+
+# Limpieza al terminar una prueba: cancela el pedido si aún se puede (anula o reembolsa el pago)
+cancel_quietly() { send POST "$API/requests/$1/cancel" "${2:-$CLIENT}" '{"reason":"Fin de la prueba de falla"}' > /dev/null 2>&1 || true; }
 
 # psql <base> <sql>  (consulta en el PostgreSQL de Docker)
 psql_q() { $COMPOSE exec -T postgres psql -U "${POSTGRES_USER:-jornalAdmin}" -d "$1" -tAc "$2" | tr -d '\r'; }

@@ -97,6 +97,9 @@ scripts/demo-asignacion.sh                                                      
 scripts/demo-notificaciones.sh                                                   # avisos en el idioma de cada persona y correos en Mailpit
 scripts/demo-facturacion.sh                                                      # pedido hasta COMPLETED, comprobante, calificaciones y reporte en USD
 scripts/demo-observabilidad.sh                                                   # id de correlación en los logs, Prometheus, Grafana y consola con un servicio caído
+scripts/falla-pagos.sh                                                           # pruebas de falla (F11): falla-*.sh, ver «Pruebas de falla y de localización»
+scripts/prueba-localizacion.sh                                                   # prueba de localización: pedido D4 en los 5 países a la hora fija
+scripts/seed-demo.sh                                                             # cliente, comercio y trabajador listos en cada región (clave Demo12345)
 docker compose -f infra/docker-compose.yml --profile full down                   # apagar (conserva datos)
 ```
 
@@ -499,6 +502,25 @@ Los vouchers se dan por pagados solos a los 10 s y vencen a los 90 s, por debajo
   | `GET /admin/console/services` | Salud de cada servicio de `CONSOLE_SERVICES` (`nombre=url` separados por coma); un servicio que no responde en 2 s aparece `DOWN` |
   | `GET /admin/console/queues` | Colas de RabbitMQ (API de gestión, `RABBITMQ_API`): mensajes, sin confirmar, consumidores, colas sin consumidor y mensajes muertos |
 
+### Pruebas de falla y de localización (F11)
+
+Cada script corre solo contra el sistema en Docker, falla con un mensaje claro si no se cumple lo esperado, deja el sistema como estaba (vuelve a arrancar lo que detuvo y cancela sus pedidos) y escribe su evidencia en `docs/evidencias/<script>.md` con la fecha, la versión (commit), lo observado y el resultado.
+
+| Script | Cómo se provoca | Resultado esperado | Demuestra |
+|---|---|---|---|
+| `scripts/falla-pagos.sh` | `stop payments`, se crea un pedido y 30 s después `start` (`OUTAGE=30`) | El pedido espera en `PENDING_PAYMENT`, el mensaje en la cola `payments.co`; al volver se autoriza una sola vez | Colas durables, reintento e idempotencia |
+| `scripts/falla-replica-pagos.sh` | `--scale payments=2`, proveedor simulado con 10 s de latencia, 4 pedidos y `docker kill` de una réplica | RabbitMQ reentrega lo que la réplica caída no confirmó; los 4 pedidos se autorizan una vez cada uno | Conmutación a réplica sin perder mensajes |
+| `scripts/falla-nadie-acepta.sh` | Asignación con `DISPATCH_SEARCH_TIMEOUT=20s` (`SEARCH_TIMEOUT`); el único trabajador rechaza | `assignment-failed`, pago anulado, pedido `CANCELLED` y aviso al cliente | Compensación de la saga |
+| `scripts/falla-broker.sh` | `stop rabbitmq` 15 s (`OUTAGE=15`) mientras se crea un pedido | El pedido se guarda; el evento espera en `event_publication` y sale al volver el broker | Outbox |
+| `scripts/falla-region.sh [br]` | `stop core-br` | 503 `SERVICE_UNAVAILABLE` solo para BR; CO responde y su consola señala `core-br` caído | Aislamiento regional |
+| `scripts/falla-concurrencia.sh` | Un solo trabajador, dos pedidos al mismo tiempo y 8 aceptaciones en paralelo | Una sola oferta, una sola aceptación (200) y una sola reserva; el otro pedido sigue buscando | Exclusión mutua |
+| `scripts/falla-duplicado.sh` | Se reenvía dos veces por la API de RabbitMQ el `payment.authorized` real de un pedido | Core, notificaciones y facturación lo descartan en su inbox; el pedido no cambia y no hay avisos de más | Idempotencia |
+| `scripts/prueba-localizacion.sh` | Prueba del core (`LocalizationReportTest`) con el reloj fijo a las 20:30 locales del 15/11/2026 | El pedido D4 en los 5 países: textos, montos, fecha y hora, dirección, teléfono, impuesto y comprobante, medios de pago y propina | Localización (sección 8) |
+
+- **Pedido D4** de la prueba de localización: 2 jornadas de bodega + 1 recargo de desplazamiento + propina según el país (sugerida en CO, BR y FR; pedida en US; ausente en JP). Precios, impuestos y tarifas salen de los perfiles reales de la base. La salida queda en `docs/evidencias/prueba-localizacion.md` y `.csv`. No necesita el sistema arriba: Testcontainers levanta lo necesario.
+- **Formatos:** `RegionFormatter` (módulo `region`) formatea montos y fechas con CLDR y las anulaciones del perfil (decimales, patrón de fecha y ciclo de hora), igual que hará el frontend con `Intl`; la prueba comprueba que los separadores de CLDR coinciden con los del perfil.
+- **Datos de demostración:** `scripts/seed-demo.sh [región...]` deja en cada región que esté arriba `cliente@<país>.jornal.test`, `comercio@<país>.jornal.test` (con identificación fiscal válida para el país) y `trabajador@<país>.jornal.test` (verificado, con bodega, ubicación base y disponible), con la clave `Demo12345`. Se puede correr varias veces. Las demos y pruebas de falla retiran a ese trabajador para tener un único candidato; después de correrlas, vuelve a ejecutar `seed-demo.sh`.
+
 ## Migraciones
 
 | Versión | Contenido |
@@ -596,6 +618,8 @@ La siguiente migración libre del core es `V18`. Los subsistemas usan `jornal-co
 - [x] Verificado en Docker (24/11/2026): `scripts/demo-pagos.sh` (un pedido real se autoriza, se anula al cancelarlo y se rechaza con el simulador) y `scripts/demo-mensajeria.sh`
 - [x] Sistema completo verificado con Docker (24/11/2026): las 5 regiones sanas detrás del gateway y `scripts/demo-mensajeria.sh` en verde (el cambio de perfil llega a pagos y el reenvío se procesa una vez)
 
+- [x] **F11** verificado en Docker (24/11/2026): las 7 pruebas de falla (`falla-pagos`, `falla-replica-pagos`, `falla-nadie-acepta`, `falla-broker`, `falla-region`, `falla-concurrencia`, `falla-duplicado`) y la prueba de localización con el pedido D4 en los 5 países, cada una con su evidencia en `docs/evidencias`
+
 **Pendiente de confirmar por el equipo**
 - [ ] Valores marcados `VERIFICAR` en `region_profiles`, `region_tax_rules`, `region_holidays` y precios de `category_prices`, con fuentes oficiales vigentes
 
@@ -607,7 +631,7 @@ El orden y los criterios de terminado están en [`documento.md`](documento.md):
 
 - **F2 (P2)** RS256 con JWKS y límite de intentos de login con Redis
 - **F3 (pendiente menor)** TLS de desarrollo en el gateway (hoy HTTP en el puerto 8000)
-- **F9** frontend (plan en `documento.md`) · **F11** pruebas de falla y de localización
+- **F9** frontend (plan en `documento.md`)
 
 ---
 

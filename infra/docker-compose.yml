@@ -128,6 +128,9 @@ services:
     environment:
       <<: *subsystem-env
       DB_URL: jdbc:postgresql://postgres:5432/jornal_dispatch
+      # Plazos de la búsqueda; scripts/falla-nadie-acepta.sh los baja para la demostración
+      DISPATCH_SEARCH_TIMEOUT: ${DISPATCH_SEARCH_TIMEOUT:-120s}
+      DISPATCH_OFFER_TIMEOUT: ${DISPATCH_OFFER_TIMEOUT:-45s}
 
   notifications:
     <<: *app
