@@ -529,7 +529,7 @@ En orden. Cada paso cierra con pruebas en verde, README actualizado y su commit 
    1. ~~TLS de desarrollo en el gateway~~ (hecho: certificado autofirmado generado por el gateway, HTTPS en 8443).
    2. ~~Límite de intentos de login con Redis (`AUTH002`)~~ (hecho).
    3. ~~Caché del catálogo en Redis con TTL~~ (hecho).
-   4. Sexto país solo con datos: Alemania, con una migración de perfil y sin tocar código.
+   4. ~~Sexto país solo con datos: Alemania~~ (hecho: `V18__germany` y `scripts/demo-pais-nuevo.sh`; un pedido en Berlín llega a COMPLETED con factura `RE-00000001` en euros).
    5. RS256 con JWKS (D10): una clave por región y los subsistemas validando con la clave pública del emisor.
    6. Carrito guardado (`DRAFT`).
    7. Réplica de la base en una región.
@@ -601,9 +601,9 @@ Cada requisito del prototipo y de localización tiene una fase responsable; el d
 | Tipografía CJK y textos largos (4.1.8) | F9 | Pendiente (F9) |
 | Datos personales por país, consentimiento y supresión (4.1.10) | Base por región (F3); consentimiento y borrado seguro ya existen | Hecho; el contacto solo se consulta al core del país |
 | Transparencia, fiabilidad, escalabilidad y manejo de fallas (5) | Gateway y nombres (F3), saga (F4), pruebas (F11) | Hecho, con evidencias de F11 |
-| Rendimiento con caché (5) | P2: caché del catálogo en Redis con TTL | Pendiente (P2) |
-| Sexto país solo con configuración (5) | P2: demostración con Alemania | Pendiente (P2) |
-| Seguridad: autenticación, TLS, roles, abuso (5) | F2, gateway con TLS y límite de tasa (F3) | Roles, JWT y límite de tasa hechos; falta TLS y el límite de intentos de login (P2) |
+| Rendimiento con caché (5) | P2: caché del catálogo en Redis con TTL | Hecho: caché por región, idioma y búsqueda, invalidada por los cambios del administrador |
+| Sexto país solo con configuración (5) | P2: demostración con Alemania | Hecho: perfil, catálogo y precios de Alemania solo con datos (`V18`); el despliegue agrega `core-de` |
+| Seguridad: autenticación, TLS, roles, abuso (5) | F2, gateway con TLS y límite de tasa (F3) | Hecho: roles, JWT, límite de tasa, TLS de desarrollo (8443) y límite de intentos de login con Redis |
 
 ## Simplificaciones que se declaran en el informe
 

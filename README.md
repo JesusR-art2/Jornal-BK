@@ -151,8 +151,8 @@ Un usuario no puede registrarse como `ADMIN` por el endpoint público. Al arranc
 
 ### Región e idioma
 
-- Cada instancia atiende **un país**: `APP_REGION` (`CO`, `BR`, `US`, `FR` o `JP`; por defecto `CO`). Solo registra usuarios de ese país y usa su perfil regional. Ejemplo: `APP_REGION=JP ./mvnw spring-boot:run`.
-- El idioma de cada respuesta sale del header `Accept-Language` (es-CO, pt-BR, en-US, fr-FR, ja-JP). Si falta o no está soportado, se usa el idioma del perfil y luego en-US. Los mensajes de error se traducen; el `code` no cambia.
+- Cada instancia atiende **un país**: `APP_REGION` (`CO`, `BR`, `US`, `FR`, `JP` o `DE`; por defecto `CO`). Solo registra usuarios de ese país y usa su perfil regional. Ejemplo: `APP_REGION=JP ./mvnw spring-boot:run`.
+- El idioma de cada respuesta sale del header `Accept-Language`: es-CO, pt-BR, en-US, fr-FR y ja-JP, que tienen todos los textos traducidos, y además los idiomas que declare algún perfil regional (`supported_locales`, por ejemplo de-DE). Si falta o no está soportado, se usa el idioma del perfil y luego en-US. Los mensajes de error se traducen; el `code` no cambia. Los textos sin traducción salen del respaldo en-US.
 
 En desarrollo también se puede promover un usuario en la base y **volver a hacer login**, porque el rol viaja dentro del token:
 
@@ -526,6 +526,37 @@ Cada script corre solo contra el sistema en Docker, falla con un mensaje claro s
 - **Formatos:** `RegionFormatter` (módulo `region`) formatea montos y fechas con CLDR y las anulaciones del perfil (decimales, patrón de fecha y ciclo de hora), igual que hará el frontend con `Intl`; la prueba comprueba que los separadores de CLDR coinciden con los del perfil.
 - **Datos de demostración:** `scripts/seed-demo.sh [región...]` deja en cada región que esté arriba `cliente@<país>.jornal.test`, `comercio@<país>.jornal.test` (con identificación fiscal válida para el país) y `trabajador@<país>.jornal.test` (verificado, con bodega, ubicación base y disponible), con la clave `Demo12345`. Se puede correr varias veces. Las demos y pruebas de falla retiran a ese trabajador para tener un único candidato; después de correrlas, vuelve a ejecutar `seed-demo.sh`.
 
+### Sexto país solo con datos: Alemania (P2)
+
+Agregar un país no exige código por país. Para Alemania (de-DE, EUR) todo lo del país es **dato**, en la migración `V18__germany`:
+- el perfil (formatos, `dd.MM.yyyy`, h23, lunes, USt 19 % incluida, `RECHNUNG` con prefijo `RE`, propina opcional del 5 o 10 %, DSGVO);
+- la dirección (calle y número, código postal de 5 dígitos, ciudad);
+- los medios de pago (`CARD`, `PAYPAL` y `SEPA` con su flujo);
+- los documentos y los feriados nacionales de 2026;
+- el catálogo traducido al alemán y los precios en euros.
+
+Lo demás es **despliegue**:
+- el servicio `core-de` del compose (perfil `de`; mismo jar, `APP_REGION=DE`) y su base `jornal_de`;
+- la ruta `/api/de/` del gateway;
+- `de` en `MESSAGING_REGIONS`, para que los subsistemas consuman sus colas;
+- el emisor de la factura en facturación (`JORNAL_BILLING_ISSUERS_DE_*`).
+
+Hubo dos cambios de código, únicos y generales, para que esto fuera cierto:
+- `Locales` acepta también los idiomas que declaran los perfiles regionales (`supported_locales`), no solo los 5 con textos traducidos. Lo que no esté traducido al alemán (errores, avisos, etiquetas del comprobante) sale en inglés.
+- Cada core declara en RabbitMQ la topología de su propia región. Así un país nuevo no pierde mensajes aunque los subsistemas aún no lo tengan en su lista.
+
+```bash
+docker compose -f infra/docker-compose.yml up -d --build --wait   # imágenes con V18
+scripts/demo-pais-nuevo.sh   # crea jornal_de si hace falta, levanta core-de y lleva un pedido en Berlín hasta COMPLETED
+```
+
+El script verifica en Docker (evidencia en `docs/evidencias/demo-pais-nuevo.md`):
+- perfil y catálogo en alemán («Lager und Inventur», 140,00 €);
+- un pedido D4 en Berlín con pago SEPA (`CHARGE_REFUND`), asignación, avisos y la factura `RE-00000001` por 303,00 € (USt 19 % incluida: 46,14 €);
+- las colas `*.de` creadas solas.
+
+Con las 5 regiones, Alemania se suma con `--profile full --profile de`. Lo prueba también `GermanyRegionIntegrationTest`.
+
 ## Migraciones
 
 | Versión | Contenido |
@@ -547,8 +578,9 @@ Cada script corre solo contra el sistema en Docker, falla con un mensaje claro s
 | `V15__requests` | `service_requests` (con punto PostGIS generado), `request_lines`, `request_status_history`, `inbox` del core y `shedlock` |
 | `V16__worker_base_location` | Ubicación base del trabajador (`base_latitude`, `base_longitude`) |
 | `V17__request_ratings` | `request_ratings`: una calificación por pedido y sentido (1 a 5) |
+| `V18__germany` | Sexto país solo con datos: Alemania (perfil de-DE y EUR, dirección, USt, medios de pago, documentos y feriados 2026, catálogo en alemán y precios en euros) |
 
-La siguiente migración libre del core es `V18`. Los subsistemas usan `jornal-common/.../db/subsystem` (V1: `inbox` y `region_profile_cache`; V2: `outbox`) y sus migraciones propias empiezan en `V100` (pagos, asignación, notificaciones y facturación).
+La siguiente migración libre del core es `V19`. Los subsistemas usan `jornal-common/.../db/subsystem` (V1: `inbox` y `region_profile_cache`; V2: `outbox`) y sus migraciones propias empiezan en `V100` (pagos, asignación, notificaciones y facturación).
 
 ## Mensajería entre procesos
 

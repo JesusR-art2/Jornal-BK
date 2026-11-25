@@ -39,12 +39,14 @@ x-core-env: &core-env
   SERVER_FORWARD_HEADERS_STRATEGY: framework
   INTERNAL_TOKEN: ${INTERNAL_TOKEN:-docker-dev-only-internal-token}
   RABBITMQ_API: http://rabbitmq:15672/api
+  # Regiones con colas en RabbitMQ. DE (Alemania) es el sexto país, solo con datos: su core arranca con --profile de
+  MESSAGING_REGIONS: &regions co,br,us,fr,jp,de
   # Servicios que vigila la consola de administración (GET /admin/console)
   CONSOLE_SERVICES: >-
     gateway=http://gateway/health,
     core-co=http://core-co:8080/actuator/health,core-br=http://core-br:8080/actuator/health,
     core-us=http://core-us:8080/actuator/health,core-fr=http://core-fr:8080/actuator/health,
-    core-jp=http://core-jp:8080/actuator/health,
+    core-jp=http://core-jp:8080/actuator/health,core-de=http://core-de:8080/actuator/health,
     payments=http://payments:8080/actuator/health,dispatch=http://dispatch:8080/actuator/health,
     notifications=http://notifications:8080/actuator/health,billing=http://billing:8080/actuator/health
 
@@ -66,6 +68,7 @@ x-subsystem-env: &subsystem-env
   RABBITMQ_HOST: rabbitmq
   RABBITMQ_USER: ${RABBITMQ_USER:-jornal}
   RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-jornal-dev-password}
+  MESSAGING_REGIONS: *regions
 
 services:
   # ------------------------------------------------------------------ cores regionales (mismo jar)
@@ -112,6 +115,17 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/jornal_jp
       ADMIN_EMAIL: admin@jp.jornal.test
 
+  # Sexto país solo con datos (migración V18): mismo jar, otra base y otro APP_REGION.
+  # scripts/demo-pais-nuevo.sh crea la base jornal_de si el volumen es anterior y lo levanta.
+  core-de:
+    <<: *core
+    profiles: [de]
+    environment:
+      <<: *core-env
+      APP_REGION: DE
+      DB_URL: jdbc:postgresql://postgres:5432/jornal_de
+      ADMIN_EMAIL: admin@de.jornal.test
+
   # ------------------------------------------------------------------ subsistemas
   payments:
     <<: *app
@@ -151,6 +165,9 @@ services:
     environment:
       <<: *subsystem-env
       DB_URL: jdbc:postgresql://postgres:5432/jornal_billing
+      # Emisor del sexto país por configuración (datos FICTICIOS, VERIFICAR)
+      JORNAL_BILLING_ISSUERS_DE_NAME: "Jornal Deutschland GmbH (fiktiv)"
+      JORNAL_BILLING_ISSUERS_DE_TAXID: "USt-IdNr. DE000000000 (VERIFICAR)"
 
   # ------------------------------------------------------------------ entrada
   gateway:

@@ -52,7 +52,8 @@ class LocalizationIntegrationTest {
             "en-US, Cleaning",
             "fr-FR, Ménage et nettoyage",
             "ja-JP, 清掃",
-            "de-DE, Aseo y limpieza",      // no soportado: idioma del perfil (es-CO)
+            "de-DE, Reinigung",            // idioma de un perfil (Alemania): se registra con los datos
+            "it-IT, Aseo y limpieza",      // no soportado: idioma del perfil (es-CO)
     })
     void categoriesAreTranslated(String acceptLanguage, String expectedName) throws Exception {
         String token = registerAndLogin("APPLICANT");

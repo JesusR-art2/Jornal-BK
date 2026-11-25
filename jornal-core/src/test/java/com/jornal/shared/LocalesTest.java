@@ -17,7 +17,7 @@ class LocalesTest {
 
     @Test
     void unsupportedOrMissingHeaderIsEmpty() {
-        assertThat(Locales.resolve("de-DE")).isEmpty();
+        assertThat(Locales.resolve("it-IT")).isEmpty();
         assertThat(Locales.resolve(null)).isEmpty();
         assertThat(Locales.resolve("@@@")).isEmpty();
     }
@@ -25,8 +25,19 @@ class LocalesTest {
     @Test
     void normalizeFallsBackToProfileThenEnglish() {
         assertThat(Locales.normalize("ja-JP", "es-CO")).isEqualTo("ja-JP");
-        assertThat(Locales.normalize("de-DE", "pt-BR")).isEqualTo("pt-BR");
+        assertThat(Locales.normalize("it-IT", "pt-BR")).isEqualTo("pt-BR");
         assertThat(Locales.normalize(null, "xx-XX")).isEqualTo("en-US");
+    }
+
+    @Test
+    void localesOfRegionProfilesAreRegistered() {
+        Locales.register(java.util.List.of("sv-SE", "no-valido", "es-CO"));
+        assertThat(Locales.isSupported("sv-SE")).isTrue();
+        assertThat(Locales.resolve("sv")).contains("sv-SE");
+        assertThat(Locales.supported()).containsAll(Locales.SUPPORTED).contains("sv-SE").doesNotContain("no-valido");
+        assertThat(Locales.isWellFormed("de-DE")).isTrue();
+        assertThat(Locales.isWellFormed("de")).isFalse();          // falta el país
+        assertThat(Locales.isWellFormed("de_DE")).isFalse();
     }
 
     @Test

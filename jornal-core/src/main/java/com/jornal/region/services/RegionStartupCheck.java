@@ -17,9 +17,11 @@ import org.springframework.stereotype.Component;
 public class RegionStartupCheck implements ApplicationRunner {
 
     private final RegionApi regions;
+    private final RegionService service;
 
     @Override
     public void run(ApplicationArguments args) {
+        service.registerProfileLocales();
         RegionProfileView profile = regions.current();
         log.info("Serving region {} (locale {}, currency {}, profile v{} {})", profile.code(),
                 profile.defaultLocale(), profile.currency(), profile.version(), profile.reviewStatus());

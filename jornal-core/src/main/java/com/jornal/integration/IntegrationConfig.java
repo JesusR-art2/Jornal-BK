@@ -10,6 +10,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.modulith.events.EventExternalizationConfiguration;
 import org.springframework.modulith.events.RoutingTarget;
+import org.springframework.amqp.core.Declarables;
+
+import java.util.List;
+import java.util.Locale;
 
 /**
  * Mensajería del core.
@@ -36,5 +40,15 @@ public class IntegrationConfig {
     @Bean
     String coreQueueName(@Value("${jornal.region.code}") String region) {
         return Topology.queue(Topology.CORE, region);
+    }
+
+    /**
+     * Topología de la región propia (su cola y las de los subsistemas para esa región), aunque la región no esté en
+     * {@code MESSAGING_REGIONS}. Así un país nuevo no pierde mensajes: sus colas existen desde que arranca su core,
+     * y los subsistemas las consumen cuando se les agrega la región. Declarar dos veces es inofensivo.
+     */
+    @Bean
+    Declarables ownRegionTopology(@Value("${jornal.region.code}") String region) {
+        return Topology.declarables(List.of(region.toLowerCase(Locale.ROOT)));
     }
 }

@@ -4,6 +4,7 @@ CREATE DATABASE jornal_br;
 CREATE DATABASE jornal_us;
 CREATE DATABASE jornal_fr;
 CREATE DATABASE jornal_jp;
+CREATE DATABASE jornal_de;   -- sexto país (P2); en un volumen anterior lo crea scripts/demo-pais-nuevo.sh
 CREATE DATABASE jornal_payments;
 CREATE DATABASE jornal_dispatch;
 CREATE DATABASE jornal_notifications;

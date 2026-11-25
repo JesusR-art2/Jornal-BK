@@ -44,6 +44,17 @@ public class RegionService implements RegionApi {
         return properties.code();
     }
 
+    /**
+     * Registra en {@link Locales} los idiomas que declaran los perfiles regionales. Con esto, un país nuevo es
+     * solo datos: su idioma se acepta aunque no tenga textos traducidos en el código (salen del respaldo en-US).
+     */
+    @Transactional(readOnly = true)
+    public void registerProfileLocales() {
+        Locales.register(profiles.findAll().stream()
+                .flatMap(p -> toView(p).supportedLocales().stream())
+                .toList());
+    }
+
     @Override
     @Transactional(readOnly = true)
     public RegionProfileView current() {
@@ -140,6 +151,7 @@ public class RegionService implements RegionApi {
 
         currentCache.set(null);
         RegionProfileView view = toView(saved);
+        Locales.register(view.supportedLocales());
         events.publishEvent(new RegionProfileUpdated(view.code(), view.version()));
         return view;
     }
@@ -186,7 +198,7 @@ public class RegionService implements RegionApi {
     }
 
     private void checkConsistency(RegionProfileRequest r) {
-        r.supportedLocales().forEach(l -> require(Locales.isSupported(l), "unsupported locale " + l));
+        r.supportedLocales().forEach(l -> require(Locales.isWellFormed(l), "invalid locale " + l));
         require(r.supportedLocales().contains(r.defaultLocale()), "defaultLocale must be in supportedLocales");
         r.allowedTimezones().forEach(this::requireZone);
         require(r.allowedTimezones().contains(r.defaultTimezone()), "defaultTimezone must be in allowedTimezones");

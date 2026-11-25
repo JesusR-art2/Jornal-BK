@@ -5,7 +5,7 @@ scrape_configs:
   - job_name: cores
     metrics_path: /actuator/prometheus
     static_configs:
-      - targets: [core-co:8080, core-br:8080, core-us:8080, core-fr:8080, core-jp:8080]
+      - targets: [core-co:8080, core-br:8080, core-us:8080, core-fr:8080, core-jp:8080, core-de:8080]
 
   - job_name: subsystems
     metrics_path: /actuator/prometheus

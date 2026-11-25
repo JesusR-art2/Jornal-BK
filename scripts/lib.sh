@@ -78,13 +78,19 @@ new_client() {
   CLIENT=$(login "$CLIENT_EMAIL" Clave12345)
 }
 
+# Lugar y pago del pedido de las demos (por defecto Bogotá). Otro país: cambia ZONE, ADDRESS_JSON, LAT y LON.
+ZONE="${ZONE:-America/Bogota}"
+[ -n "${ADDRESS_JSON:-}" ] || ADDRESS_JSON='{"street_address":"Calle 26 # 68-35","city":"Bogotá","department":"Cundinamarca"}'
+PAYMENT_METHOD="${PAYMENT_METHOD:-CARD}"
+TIP_MINOR="${TIP_MINOR:-5000}"
+
 # create_request <token> <idempotency-key> [categoría]  -> imprime el id del pedido
 create_request() {
   local token="$1" key="$2" category="${3:-$CATEGORY}"
   local day; day=$(date -d '+2 days' +%Y-%m-%d 2>/dev/null || date -v+2d +%Y-%m-%d)
   printf '%s' "{\"categoryId\":\"$category\",\"units\":2,\"scheduledLocal\":\"${day}T08:00\",
-    \"timezone\":\"America/Bogota\",\"address\":{\"street_address\":\"Calle 26 # 68-35\",\"city\":\"Bogotá\",
-    \"department\":\"Cundinamarca\"},\"latitude\":$LAT,\"longitude\":$LON,\"paymentMethod\":\"CARD\",\"tipMinor\":5000}" \
+    \"timezone\":\"$ZONE\",\"address\":$ADDRESS_JSON,\"latitude\":$LAT,\"longitude\":$LON,
+    \"paymentMethod\":\"$PAYMENT_METHOD\",\"tipMinor\":$TIP_MINOR}" \
     | curl -sf -X POST "$API/requests" -H 'Content-Type: application/json' -H "Authorization: Bearer $token" \
       -H "Idempotency-Key: $key" --data-binary @- | jq -r '.id'
 }
