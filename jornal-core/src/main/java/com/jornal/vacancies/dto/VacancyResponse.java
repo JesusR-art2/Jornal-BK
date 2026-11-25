@@ -38,5 +38,9 @@ public record VacancyResponse(
         Double distanceKm,
         ApplicationStatus myApplication,
         Long applicants,
-        Instant createdAt) {
+        Instant createdAt,
+        /** Idioma en que se escribió (es, en, pt...). */
+        String sourceLanguage,
+        /** El título, la descripción y los implementos se tradujeron automáticamente al idioma de quien consulta. */
+        boolean translated) {
 }

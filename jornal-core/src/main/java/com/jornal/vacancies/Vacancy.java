@@ -51,6 +51,10 @@ public class Vacancy {
     @Column(nullable = false)
     private String timezone;
 
+    /** Idioma en que el empleador escribió la vacante (BCP 47); el contenido se traduce al idioma de quien la ve. */
+    @Column(name = "source_locale")
+    private String sourceLocale;
+
     @Column(name = "starts_at", nullable = false)
     private Instant startsAt;
 

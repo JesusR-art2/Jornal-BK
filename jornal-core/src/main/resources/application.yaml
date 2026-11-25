@@ -16,6 +16,10 @@ jornal:
   cors:
     # Orígenes del frontend (lista separada por comas). Admite patrones con *.
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200,https://*.jornal.localhost}
+  translation:
+    # LibreTranslate. Vacío: sin traducción (las vacantes se muestran en su idioma original).
+    url: ${TRANSLATION_URL:}
+    timeout: ${TRANSLATION_TIMEOUT:8s}
   console:
     # Servicios que vigila la consola (nombre=url de salud, separados por coma) y API de gestión de RabbitMQ
     services: ${CONSOLE_SERVICES:}

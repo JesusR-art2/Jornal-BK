@@ -38,7 +38,7 @@ class LoginRateLimitIntegrationTest {
         login(email, "Clave12345", "10.0.0.1")
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.code").value("AUTH002_TOO_MANY_ATTEMPTS"))
-                .andExpect(jsonPath("$.detail").value("Demasiados intentos de inicio de sesión, inténtalo más tarde"));
+                .andExpect(jsonPath("$.detail").value("Se han realizado demasiados intentos de inicio de sesión. Por favor, inténtelo más tarde"));
 
         // Otra cuenta desde otra IP no se ve afectada
         login(register(), "Clave12345", "10.0.0.2").andExpect(status().isOk());

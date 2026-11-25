@@ -56,11 +56,11 @@ class TemplatesTest {
         args.put("items", "Botas, Guantes");
         String body = templates.render("vacancy.SELECTED.worker", Locale.forLanguageTag("es-CO"), args)
                 .orElseThrow().body();
-        assertThat(body).contains("Calle 26").contains("jueves 8:00").contains("Lleva: Botas, Guantes.")
-                .contains("¿Puedes asistir?");
+        assertThat(body).contains("Calle 26").contains("jueves 8:00").contains("Debe llevar: Botas, Guantes.")
+                .contains("¿Podrá asistir?");
         args.put("items", "none");
         assertThat(templates.render("vacancy.SELECTED.worker", Locale.forLanguageTag("es-CO"), args)
-                .orElseThrow().body()).contains("No necesitas llevar implementos.");
+                .orElseThrow().body()).contains("No es necesario llevar implementos.");
         assertThat(templates.exists("vacancy.CONFIRMED.employer")).isTrue();
         assertThat(templates.exists("vacancy.CONFIRMED.worker")).isFalse();
     }

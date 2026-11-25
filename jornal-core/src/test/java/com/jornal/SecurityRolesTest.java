@@ -114,7 +114,7 @@ class SecurityRolesTest {
     void securityErrorsAreTranslated() throws Exception {
         mvc.perform(get("/users/me").header("Accept-Language", "ja-JP"))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.detail").value("ログインが必要か、トークンが無効です"));
+                .andExpect(jsonPath("$.detail").value("ログインしてください。セッションの有効期限が切れている可能性があります"));
         mvc.perform(get("/admin/users").header("Authorization", bearer(Rol.WORKER))
                         .header("Accept-Language", "pt-BR,pt;q=0.9"))
                 .andExpect(status().isForbidden())

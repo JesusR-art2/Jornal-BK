@@ -109,7 +109,7 @@ class GermanyRegionIntegrationTest {
                          "acceptedTerms":true}
                         """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value("The request contains invalid fields"));
+                .andExpect(jsonPath("$.detail").value("Some of the information provided is not valid"));
     }
 
     private String login(String email) throws Exception {

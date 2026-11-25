@@ -10,6 +10,8 @@ import com.jornal.users.UserSummary;
 import com.jornal.vacancies.*;
 import com.jornal.vacancies.dto.*;
 import com.jornal.vacancies.enums.ErrorVacancy;
+import com.jornal.vacancies.translation.VacancyTranslations;
+import org.springframework.context.i18n.LocaleContextHolder;
 import com.jornal.workers.NearbyWorker;
 import com.jornal.workers.WorkerApi;
 import com.jornal.workers.WorkerSummary;
@@ -55,6 +57,7 @@ public class VacancyService {
     private final VacancyRepository vacancies;
     private final VacancyApplicationRepository applications;
     private final EmployerSettingsRepository settings;
+    private final VacancyTranslations translations;
     private final RegionApi regionApi;
     private final UserApi userApi;
     private final WorkerApi workerApi;
@@ -99,6 +102,8 @@ public class VacancyService {
         v.setLatitude(draft.latitude());
         v.setLongitude(draft.longitude());
         v.setTimezone(zone);
+        // Idioma en que el empleador escribe (el de su petición); de ahí se traduce para cada lector.
+        v.setSourceLocale(LocaleContextHolder.getLocale().toLanguageTag());
         v.setStartsAt(startsAt);
         v.setEndsAt(endsAt);
         v.setPositions(draft.positions());
@@ -546,13 +551,21 @@ public class VacancyService {
             mine = applications.findByVacancyIdAndWorkerId(v.getId(), caller.id())
                     .map(VacancyApplication::getStatus).orElse(null);
         }
+        VacancyTranslations.Content c = content(v);
         return new VacancyResponse(v.getId(), v.getEmployerId(),
                 userApi.findSummaryById(v.getEmployerId()).map(UserSummary::name).orElse(null),
-                v.getTitle(), v.getDescription(), v.getCategoryId(), List.copyOf(v.getItems()), v.getAddressText(),
+                c.title(), c.description(), v.getCategoryId(), c.items(), v.getAddressText(),
                 v.getLatitude(), v.getLongitude(), v.getTimezone(), v.getStartsAt(), v.getEndsAt(), v.getPositions(),
                 applications.countByVacancyIdAndStatusIn(v.getId(), SLOT), v.getPayMinor(), v.getCurrency(),
                 v.getMoneyScale(), v.getStatus(), distance, mine,
-                owner ? (Long) (long) applications.findByVacancyId(v.getId()).size() : null, v.getCreatedAt());
+                owner ? (Long) (long) applications.findByVacancyId(v.getId()).size() : null, v.getCreatedAt(),
+                c.sourceLanguage(), c.translated());
+    }
+
+    /** Título, descripción e implementos en el idioma de la petición (traducidos si hace falta). */
+    private VacancyTranslations.Content content(Vacancy v) {
+        return translations.contentOf(v.getId(), v.getTitle(), v.getDescription(), v.getItems(), v.getSourceLocale(),
+                LocaleContextHolder.getLocale());
     }
 
     private ApplicationResponse toResponse(VacancyApplication a, Vacancy v) {
@@ -563,7 +576,7 @@ public class VacancyService {
         boolean verified = user.map(UserSummary::verified).orElse(false);
         long completed = applications.countByWorkerIdAndStatus(a.getWorkerId(), ApplicationStatus.COMPLETED);
         double score = CandidateRanking.score(ratingAvg, ratingCount, completed, a.getDistanceKm(), verified);
-        return new ApplicationResponse(a.getId(), v.getId(), v.getTitle(), a.getWorkerId(),
+        return new ApplicationResponse(a.getId(), v.getId(), content(v).title(), a.getWorkerId(),
                 user.map(UserSummary::name).orElse(null), verified, ratingAvg, ratingCount, completed,
                 a.getDistanceKm(), score, a.getStatus(), a.getMessage(), a.getSelectedAt(), a.getRespondedAt(),
                 a.getClosedAt(), a.getCloseReason(), a.getJustification(), a.getPayoutMinor(), v.getCurrency(),
