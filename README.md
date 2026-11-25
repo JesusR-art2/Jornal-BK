@@ -82,9 +82,9 @@ El proyecto es **multimódulo**: la API regional está en `jornal-core`. Con Doc
 ./mvnw -pl jornal-core spring-boot:run
 ```
 
-En Windows: `mvnw.cmd ...`, o ejecuta `JornalBackendApplication` desde IntelliJ (módulo `jornal-core`, perfil `dev`, directorio de trabajo `jornal-core`).
+En Windows: `mvnw.cmd ...`, o ejecuta `JornalBackendApplication` desde IntelliJ (módulo `jornal-core`, perfil `dev`, directorio de trabajo la raíz del repositorio, que es el que IntelliJ pone por defecto).
 
-Spring Boot ejecuta `docker compose up` con el `docker-compose.yaml` de la raíz (`spring.docker.compose.file: ../docker-compose.yaml`), espera a que PostgreSQL, Redis y RabbitMQ estén sanos, configura las conexiones y Flyway aplica las migraciones. En `dev` no necesitas levantar los contenedores a mano. Consola de RabbitMQ: `http://localhost:15672` (guest/guest).
+Spring Boot ejecuta `docker compose up` con el `docker-compose.yaml` de la raíz (`spring.docker.compose.file: docker-compose.yaml`, relativo al directorio de trabajo; `spring-boot:run` también arranca desde la raíz), espera a que PostgreSQL, Redis y RabbitMQ estén sanos, configura las conexiones y Flyway aplica las migraciones. En `dev` no necesitas levantar los contenedores a mano. Consola de RabbitMQ: `http://localhost:15672` (guest/guest).
 
 ### Sistema distribuido completo (5 regiones + 4 subsistemas)
 

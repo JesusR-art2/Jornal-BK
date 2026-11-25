@@ -7,8 +7,9 @@ spring:
   docker:
     compose:
       enabled: true
-      # Relativo al directorio de trabajo del módulo (jornal-core): el compose de desarrollo está en la raíz.
-      file: ../docker-compose.yaml
+      # Relativo al directorio de trabajo, que es la raíz del repositorio: es el que usa IntelliJ por defecto,
+      # y spring-boot:run arranca ahí también (workingDirectory en jornal-core/pom.xml).
+      file: docker-compose.yaml
       lifecycle-management: start-only   # los contenedores siguen vivos al detener la app
   jpa:
     show-sql: true
