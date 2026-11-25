@@ -4,6 +4,27 @@ Guía para publicar el backend en Render con **una sola base PostgreSQL 18** (re
 en local con `infra/docker-compose.render.yml` (PostgreSQL 18.6 + PostGIS 3.6, una base, un esquema por servicio,
 sin gateway) y `scripts/verificar-render.mjs` (salud, CORS y flujo completo de vacantes con pago automático).
 
+## 0. Opción rápida: Blueprint (`render.yaml`)
+
+En Render: **New → Blueprint**, elija este repositorio y la rama. El archivo `render.yaml` crea de una vez la base
+PostgreSQL (free), el Key Value (free) y los servicios `jornal-core-co`, `jornal-payments` y `jornal-notifications`
+(Docker, free, Oregon). Render pide solo 4 valores:
+
+| Variable (en jornal-core-co) | Valor |
+|---|---|
+| `SPRING_RABBITMQ_ADDRESSES` | La «AMQP URL» de CloudAMQP (`amqps://...`) |
+| `CORS_ALLOWED_ORIGINS` | URL del frontend (por ejemplo `https://jornal-ft.onrender.com`) |
+| `ADMIN_EMAIL` | Correo del primer administrador |
+| `ADMIN_PASSWORD` | Su contraseña |
+
+- La base llega como `DATABASE_URL` (`postgresql://...`) y la aplicación la traduce a JDBC
+  (`jornal-common`, `DatabaseUrlEnvironmentPostProcessor`).
+- `JWT_SECRET` e `INTERNAL_TOKEN` los genera Render; pagos y notificaciones copian del core el JWT, el token, la URL de
+  RabbitMQ y los orígenes CORS (`fromService` con `envVarKey`).
+- Notificaciones llama al core en `https://<host del core>.onrender.com` (`CORE_HOST` sale de `fromService`). Si Render
+  le pone otro subdominio público al core, defina `CORE_URL_TEMPLATE` con la URL real en notificaciones.
+- Si después cambia la URL del frontend, actualice `CORS_ALLOWED_ORIGINS` en el core y vuelva a desplegar notificaciones.
+
 ## 1. Servicios
 
 | Servicio (docker-compose) | Qué hace | ¿Lo necesita el frontend? | En Render |

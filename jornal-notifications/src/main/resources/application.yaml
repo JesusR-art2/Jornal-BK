@@ -63,7 +63,8 @@ jornal:
   notifications:
     # Core de cada región para pedir el contacto ({region} = co, br...). En Docker: http://core-{region}:8080
     # En Render: la URL pública del core, por ejemplo https://jornal-core-co.onrender.com
-    core-url: ${CORE_URL_TEMPLATE:http://localhost:8080}
+    # Render Blueprint: CORE_URL_SCHEME=https, CORE_HOST (fromService host) y CORE_HOST_SUFFIX=.onrender.com
+    core-url: ${CORE_URL_TEMPLATE:${CORE_URL_SCHEME:http}://${CORE_HOST:localhost}${CORE_HOST_SUFFIX::8080}}
     internal-token: ${INTERNAL_TOKEN:dev-only-internal-token}
     contact-attempts: 3
     contact-backoff: 300ms

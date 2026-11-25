@@ -1,0 +1,165 @@
+# Render Blueprint: despliegue de demostración (plan gratuito, región Oregon, solo Colombia).
+# Crea la base PostgreSQL, el Key Value (Redis) y los 3 servicios que necesita el frontend:
+#   jornal-core-co       API de Colombia (cuentas, catálogo, vacantes, pagos de vacantes)
+#   jornal-payments      pago automático al trabajador
+#   jornal-notifications avisos, bandeja y WebSocket (/ws)
+# RabbitMQ no lo ofrece Render: se usa CloudAMQP (plan gratuito) y su URL se pide al crear el Blueprint.
+# Guía completa: docs/DESPLIEGUE-RENDER.md
+
+databases:
+  - name: jornal-db
+    plan: free
+    region: oregon
+    postgresMajorVersion: "18"
+    databaseName: jornal
+    user: jornal
+    # Una sola base para todos: cada servicio usa su esquema (DB_SCHEMA). PostGIS queda en public.
+
+services:
+  # ------------------------------------------------------------------ Redis (Key Value de Render)
+  - type: keyvalue
+    name: jornal-keyvalue
+    plan: free
+    region: oregon
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []          # solo conexiones internas
+
+  # ------------------------------------------------------------------ core de Colombia
+  - type: web
+    name: jornal-core-co
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./jornal-core/Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: APP_REGION
+        value: CO
+      # postgresql://usuario:clave@host:puerto/base: la aplicación la traduce a JDBC
+      - key: DATABASE_URL
+        fromDatabase:
+          name: jornal-db
+          property: connectionString
+      - key: DB_SCHEMA
+        value: core_co
+      - key: SPRING_DATA_REDIS_URL
+        fromService:
+          type: keyvalue
+          name: jornal-keyvalue
+          property: connectionString
+      # URL AMQP de CloudAMQP (amqps://usuario:clave@host/vhost)
+      - key: SPRING_RABBITMQ_ADDRESSES
+        sync: false
+      - key: MESSAGING_REGIONS
+        value: co
+      - key: MESSAGING_CONSUMERS
+        value: core,payments,notifications
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_ISSUER
+        value: jornal-render
+      - key: INTERNAL_TOKEN
+        generateValue: true
+      # Origen del frontend (por ejemplo https://jornal-ft.onrender.com); varios separados por coma
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SERVER_FORWARD_HEADERS_STRATEGY
+        value: framework
+      - key: TRANSLATION_URL     # sin traducción automática en el plan gratuito
+        value: ""
+
+  # ------------------------------------------------------------------ pagos
+  - type: web
+    name: jornal-payments
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./jornal-payments/Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DATABASE_URL
+        fromDatabase:
+          name: jornal-db
+          property: connectionString
+      - key: DB_SCHEMA
+        value: payments
+      - key: SPRING_RABBITMQ_ADDRESSES
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: SPRING_RABBITMQ_ADDRESSES
+      - key: MESSAGING_REGIONS
+        value: co
+      - key: MESSAGING_CONSUMERS
+        value: core,payments,notifications
+      - key: SERVER_FORWARD_HEADERS_STRATEGY
+        value: framework
+
+  # ------------------------------------------------------------------ notificaciones
+  - type: web
+    name: jornal-notifications
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./jornal-notifications/Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DATABASE_URL
+        fromDatabase:
+          name: jornal-db
+          property: connectionString
+      - key: DB_SCHEMA
+        value: notifications
+      - key: SPRING_RABBITMQ_ADDRESSES
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: SPRING_RABBITMQ_ADDRESSES
+      - key: MESSAGING_REGIONS
+        value: co
+      - key: MESSAGING_CONSUMERS
+        value: core,payments,notifications
+      # Mismo JWT y token interno que el core
+      - key: JWT_SECRET
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: JWT_SECRET
+      - key: JWT_ISSUER
+        value: jornal-render
+      - key: INTERNAL_TOKEN
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: INTERNAL_TOKEN
+      # Contacto del destinatario: se pide al core por su URL pública https://<host>.onrender.com
+      # (en el plan gratuito un servicio web no recibe tráfico de la red privada)
+      - key: CORE_URL_SCHEME
+        value: https
+      - key: CORE_HOST
+        fromService:
+          type: web
+          name: jornal-core-co
+          property: host
+      - key: CORE_HOST_SUFFIX
+        value: .onrender.com
+      - key: CORS_ALLOWED_ORIGINS
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: CORS_ALLOWED_ORIGINS
+      - key: SERVER_FORWARD_HEADERS_STRATEGY
+        value: framework
