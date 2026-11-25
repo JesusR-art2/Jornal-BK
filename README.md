@@ -337,6 +337,8 @@ Activar, desactivar, cambiar la verificación y borrar publican `UserAccessChang
 
 Traducción: idioma pedido → idioma del perfil → en-US → nombre base.
 
+**Caché en Redis:** `GET /categories` se sirve desde Redis con TTL de 10 minutos (`CATALOG_CACHE_TTL`; `0s` la desactiva). La clave lleva la región, el idioma pedido, el texto buscado y una «generación» del catálogo (`jornal:<región>:catalog:gen<n>:<idioma>:<q>`). Crear, editar, activar o desactivar una categoría, cambiar una traducción o un precio, o cambiar el perfil regional sube la generación al confirmar la transacción, y así el cambio se ve de inmediato. Si Redis no responde, se lee de la base. La métrica `jornal_catalog_cache_total{result="hit|miss|error"}` muestra la tasa de aciertos. Lo prueba `CatalogCacheIntegrationTest`.
+
 ### Region (perfil regional)
 
 | Método y ruta | Acceso | Descripción |

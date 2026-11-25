@@ -22,6 +22,9 @@ jornal:
     rabbit-api: ${RABBITMQ_API:http://localhost:15672/api}
     rabbit-user: ${RABBITMQ_USER:guest}
     rabbit-password: ${RABBITMQ_PASSWORD:guest}
+  catalog:
+    # Caché del catálogo público en Redis (GET /categories). 0s la desactiva.
+    cache-ttl: ${CATALOG_CACHE_TTL:10m}
   internal:
     # Token de las consultas internas entre servicios (/internal/**). Solo desarrollo; en Docker va por variable.
     token: ${INTERNAL_TOKEN:dev-only-internal-token}

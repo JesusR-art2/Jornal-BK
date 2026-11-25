@@ -31,6 +31,7 @@ public class CategoryService implements CatalogApi {
     private final CategoryPriceRepository priceRepository;
     private final RegionApi regionApi;
     private final Clock clock;
+    private final CatalogCache cache;
 
     @Transactional(readOnly = true)
     public PageResponse<CategoryResponse> findAll(Boolean active, String q, Pageable pageable) {
@@ -38,14 +39,21 @@ public class CategoryService implements CatalogApi {
                 repository.findAll(active, toPattern(q), pageable).map(mapper::toResponse));
     }
 
-    /** Categorías activas en el idioma de la petición, con el precio de esta región. */
+    /**
+     * Categorías activas en el idioma de la petición, con el precio de esta región. Se sirven desde la caché de
+     * Redis ({@link CatalogCache}) por región, idioma y texto buscado; cualquier cambio del administrador la invalida.
+     */
     @Transactional(readOnly = true)
     public List<CategoryView> findActive(String q) {
+        RegionProfileView profile = regionApi.current();
+        List<String> chain = localeChain(profile);
+        return cache.active(chain.getFirst(), q, () -> loadActive(q, profile, chain));
+    }
+
+    private List<CategoryView> loadActive(String q, RegionProfileView profile, List<String> chain) {
         List<Category> categories = repository.searchActive(toPattern(q), PUBLIC_LIMIT);
         if (categories.isEmpty()) return List.of();
 
-        RegionProfileView profile = regionApi.current();
-        List<String> chain = localeChain(profile);
         Map<UUID, CategoryTranslation> translations = bestTranslations(ids(categories), chain);
         Map<UUID, CategoryPrice> prices = priceRepository
                 .findByCategoryIdInAndRegionCode(ids(categories), profile.code()).stream()
@@ -69,6 +77,7 @@ public class CategoryService implements CatalogApi {
             throw new ApiException(ErrorCatalog.CAT002_SLUG_ALREADY_EXISTS, request.slug());
         }
         Category category = mapper.toEntity(request);
+        cache.invalidate();
         return mapper.toResponse(repository.save(category));
     }
 
@@ -76,17 +85,20 @@ public class CategoryService implements CatalogApi {
     public CategoryResponse update(UUID id, UpdateCategoryRequest request) {
         Category category = getOrThrow(id);
         mapper.update(request, category);
+        cache.invalidate();
         return mapper.toResponse(category);
     }
 
     @Transactional
     public void deactivate(UUID id) {
         getOrThrow(id).setActive(false);
+        cache.invalidate();
     }
 
     @Transactional
     public void activate(UUID id) {
         getOrThrow(id).setActive(true);
+        cache.invalidate();
     }
 
     /** Resúmenes en el idioma de la petición (los usan otros módulos, por ejemplo workers). */
@@ -139,6 +151,7 @@ public class CategoryService implements CatalogApi {
         t.setName(req.name().trim());
         t.setDescription(req.description());
         translationRepository.save(t);
+        cache.invalidate();
     }
 
     /** Fija el precio de la categoría en la región de esta instancia, con la moneda del perfil. */
@@ -158,6 +171,7 @@ public class CategoryService implements CatalogApi {
         price.setCurrency(profile.currency());
         price.setUpdatedAt(clock.instant());
         priceRepository.save(price);
+        cache.invalidate();
         return toPrice(price, profile);
     }
 
