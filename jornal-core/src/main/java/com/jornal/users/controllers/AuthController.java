@@ -7,6 +7,7 @@ import com.jornal.users.dto.TokenResponse;
 import com.jornal.users.dto.UserResponse;
 import com.jornal.users.services.AuthService;
 import com.jornal.users.services.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -27,8 +28,9 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public TokenResponse login(@Valid @RequestBody LoginRequest request) {
-        return authService.login(request);
+    public TokenResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
+        // Detrás del gateway, getRemoteAddr() ya es la IP del cliente (X-Forwarded-For con forward-headers-strategy)
+        return authService.login(request, http.getRemoteAddr());
     }
 
     /** Entrega un access token nuevo y rota el refresh token. */

@@ -20,6 +20,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokens;
+    private final LoginAttempts loginAttempts;
 
     private String dummyHash;
 
@@ -30,6 +31,16 @@ public class AuthService {
 
     @Transactional
     public TokenResponse login(LoginRequest request) {
+        return login(request, null);
+    }
+
+    /**
+     * Inicio de sesión con límite de intentos fallidos por cuenta y por IP ({@code AUTH002_TOO_MANY_ATTEMPTS}).
+     * Con la cuenta bloqueada se responde 429 aunque la clave sea correcta, hasta que vence la ventana.
+     */
+    @Transactional
+    public TokenResponse login(LoginRequest request, String clientIp) {
+        loginAttempts.check(request.email(), clientIp);
         User user = repository.findByEmail(request.email()).orElse(null);
 
         // Se compara siempre con un hash, exista o no el usuario, para que el tiempo de respuesta no revele emails.
@@ -37,8 +48,10 @@ public class AuthService {
         boolean passwordOk = passwordEncoder.matches(request.password(), hash);
 
         if (user == null || !passwordOk || !user.isActive()) {
+            loginAttempts.failed(request.email(), clientIp);
             throw new ApiException(ErrorUser.USER003_INVALID_CREDENTIALS);
         }
+        loginAttempts.succeeded(request.email());
         return tokens(user, refreshTokens.issue(user.getId()));
     }
 

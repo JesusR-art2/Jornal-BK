@@ -212,8 +212,9 @@ En producción no se usa el Docker Compose de desarrollo ni hay secretos en el r
 - **Errores 401 y 403** como `ProblemDetail` con `code` (`UNAUTHORIZED`, `ACCESS_DENIED`).
 - **Rutas públicas**: `/auth/**`, `GET /countries`, `GET /region-profile/**`, `/actuator/health`, Swagger y `/v3/api-docs/**`. Todo lo demás exige token.
 - El login responde con el mismo error ante email inexistente, clave incorrecta o usuario desactivado, y compara siempre contra un hash para no revelar qué emails existen por tiempos de respuesta.
+- **Límite de intentos de login** (contado en Redis, compartido por todas las instancias de la región): 5 fallos por cuenta o 20 por dirección IP dentro de 15 minutos responden `429 AUTH002_TOO_MANY_ATTEMPTS` hasta que vence la ventana, aunque la clave siguiente sea correcta. Un login correcto borra el contador de la cuenta. El correo se guarda en Redis como hash SHA-256. Si Redis no responde, no se bloquea a nadie (falla abierta). Variables: `LOGIN_MAX_ATTEMPTS`, `LOGIN_MAX_ATTEMPTS_PER_IP`, `LOGIN_WINDOW`. Lo prueba `LoginRateLimitIntegrationTest`.
 
-Pendiente (P2 de la fase F2): firma RS256 con JWKS para que los subsistemas validen el token sin el secreto (D10; respaldo: HS256 compartido) y límite de intentos de login con Redis (`AUTH002`). Un access token ya emitido vive hasta 15 minutos aunque la cuenta se bloquee.
+Pendiente (P2 de la fase F2): firma RS256 con JWKS para que los subsistemas validen el token sin el secreto (D10; respaldo: HS256 compartido). Un access token ya emitido vive hasta 15 minutos aunque la cuenta se bloquee.
 
 ---
 
