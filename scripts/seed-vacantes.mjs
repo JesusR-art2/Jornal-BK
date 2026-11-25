@@ -1,10 +1,11 @@
 // Crea vacantes de prueba en Colombia con las cuentas de demostración (comercio y cliente) a través del gateway.
 // Uso:  node scripts/seed-vacantes.mjs            (requiere docker compose arriba y scripts/seed-demo.sh)
-// Variables opcionales: GATEWAY (http://localhost:8000), DEMO_PASSWORD (Demo12345).
+//       API_URL=https://<core>.onrender.com node scripts/seed-vacantes.mjs   (Render; ver scripts/seed-render.mjs)
+// Variables opcionales: GATEWAY (http://localhost:8000), API_URL (URL del core; reemplaza GATEWAY/api/co), DEMO_PASSWORD (Demo12345).
 // Todos los datos son ficticios. Cada corrida crea vacantes nuevas, a partir de mañana.
 
 const GATEWAY = process.env.GATEWAY ?? 'http://localhost:8000';
-const API = `${GATEWAY}/api/co`;
+const API = (process.env.API_URL ?? `${GATEWAY}/api/co`).replace(/\/$/, '');
 const PASSWORD = process.env.DEMO_PASSWORD ?? 'Demo12345';
 
 async function call(path, { token, method = 'GET', body } = {}) {
