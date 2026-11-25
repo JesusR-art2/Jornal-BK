@@ -1,6 +1,9 @@
-# Render Blueprint: despliegue de demostración (plan gratuito, región Oregon, solo Colombia).
-# Crea la base PostgreSQL, el Key Value (Redis) y los 3 servicios que necesita el frontend:
-#   jornal-core-co       API de Colombia (cuentas, catálogo, vacantes, pagos de vacantes)
+# Render Blueprint: despliegue de demostración (plan gratuito, región Oregon, las 6 regiones con datos).
+# Crea la base PostgreSQL, el Key Value (Redis) y los servicios que necesita el frontend:
+#   jornal-core-co       API de Colombia (cuentas, catálogo, vacantes, pagos de vacantes); tiene los valores
+#                        compartidos (JWT, token interno, RabbitMQ, CORS, administrador inicial)
+#   jornal-core-br/us/fr/jp/de  mismo jar para Brasil, Estados Unidos, Francia, Japón y Alemania: su APP_REGION y
+#                        su esquema (core_<región>) en la misma base; copian de jornal-core-co los valores compartidos
 #   jornal-payments      pago automático al trabajador
 #   jornal-notifications avisos, bandeja y WebSocket (/ws)
 # RabbitMQ no lo ofrece Render: se usa CloudAMQP (plan gratuito) y su URL se pide al crear el Blueprint.
@@ -45,6 +48,9 @@ services:
           property: connectionString
       - key: DB_SCHEMA
         value: core_co
+      # 6 cores + pagos + notificaciones contra una base gratuita: 5 conexiones por core (por defecto son 10)
+      - key: SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE
+        value: "5"
       - key: SPRING_DATA_REDIS_URL
         fromService:
           type: keyvalue
@@ -54,7 +60,7 @@ services:
       - key: SPRING_RABBITMQ_ADDRESSES
         sync: false
       - key: MESSAGING_REGIONS
-        value: co
+        value: co,br,us,fr,jp,de
       - key: MESSAGING_CONSUMERS
         value: core,payments,notifications
       - key: JWT_SECRET
@@ -73,6 +79,351 @@ services:
       - key: SERVER_FORWARD_HEADERS_STRATEGY
         value: framework
       - key: TRANSLATION_URL     # sin traducción automática en el plan gratuito
+        value: ""
+
+  # ------------------------------------------------------------------ core de Brasil
+  - type: web
+    name: jornal-core-br
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./jornal-core/Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: APP_REGION
+        value: BR
+      - key: DATABASE_URL
+        fromDatabase:
+          name: jornal-db
+          property: connectionString
+      - key: DB_SCHEMA
+        value: core_br
+      - key: SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE
+        value: "5"
+      - key: SPRING_DATA_REDIS_URL
+        fromService:
+          type: keyvalue
+          name: jornal-keyvalue
+          property: connectionString
+      - key: SPRING_RABBITMQ_ADDRESSES
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: SPRING_RABBITMQ_ADDRESSES
+      - key: MESSAGING_REGIONS
+        value: co,br,us,fr,jp,de
+      - key: MESSAGING_CONSUMERS
+        value: core,payments,notifications
+      # Mismo JWT, token interno, orígenes CORS y administrador inicial que jornal-core-co
+      - key: JWT_SECRET
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: JWT_SECRET
+      - key: JWT_ISSUER
+        value: jornal-render
+      - key: INTERNAL_TOKEN
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: INTERNAL_TOKEN
+      - key: CORS_ALLOWED_ORIGINS
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: CORS_ALLOWED_ORIGINS
+      - key: ADMIN_EMAIL
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: ADMIN_EMAIL
+      - key: ADMIN_PASSWORD
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: ADMIN_PASSWORD
+      - key: SERVER_FORWARD_HEADERS_STRATEGY
+        value: framework
+      - key: TRANSLATION_URL
+        value: ""
+
+  # ------------------------------------------------------------------ core de Estados Unidos
+  - type: web
+    name: jornal-core-us
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./jornal-core/Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: APP_REGION
+        value: US
+      - key: DATABASE_URL
+        fromDatabase:
+          name: jornal-db
+          property: connectionString
+      - key: DB_SCHEMA
+        value: core_us
+      - key: SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE
+        value: "5"
+      - key: SPRING_DATA_REDIS_URL
+        fromService:
+          type: keyvalue
+          name: jornal-keyvalue
+          property: connectionString
+      - key: SPRING_RABBITMQ_ADDRESSES
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: SPRING_RABBITMQ_ADDRESSES
+      - key: MESSAGING_REGIONS
+        value: co,br,us,fr,jp,de
+      - key: MESSAGING_CONSUMERS
+        value: core,payments,notifications
+      # Mismo JWT, token interno, orígenes CORS y administrador inicial que jornal-core-co
+      - key: JWT_SECRET
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: JWT_SECRET
+      - key: JWT_ISSUER
+        value: jornal-render
+      - key: INTERNAL_TOKEN
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: INTERNAL_TOKEN
+      - key: CORS_ALLOWED_ORIGINS
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: CORS_ALLOWED_ORIGINS
+      - key: ADMIN_EMAIL
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: ADMIN_EMAIL
+      - key: ADMIN_PASSWORD
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: ADMIN_PASSWORD
+      - key: SERVER_FORWARD_HEADERS_STRATEGY
+        value: framework
+      - key: TRANSLATION_URL
+        value: ""
+
+  # ------------------------------------------------------------------ core de Francia
+  - type: web
+    name: jornal-core-fr
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./jornal-core/Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: APP_REGION
+        value: FR
+      - key: DATABASE_URL
+        fromDatabase:
+          name: jornal-db
+          property: connectionString
+      - key: DB_SCHEMA
+        value: core_fr
+      - key: SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE
+        value: "5"
+      - key: SPRING_DATA_REDIS_URL
+        fromService:
+          type: keyvalue
+          name: jornal-keyvalue
+          property: connectionString
+      - key: SPRING_RABBITMQ_ADDRESSES
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: SPRING_RABBITMQ_ADDRESSES
+      - key: MESSAGING_REGIONS
+        value: co,br,us,fr,jp,de
+      - key: MESSAGING_CONSUMERS
+        value: core,payments,notifications
+      # Mismo JWT, token interno, orígenes CORS y administrador inicial que jornal-core-co
+      - key: JWT_SECRET
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: JWT_SECRET
+      - key: JWT_ISSUER
+        value: jornal-render
+      - key: INTERNAL_TOKEN
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: INTERNAL_TOKEN
+      - key: CORS_ALLOWED_ORIGINS
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: CORS_ALLOWED_ORIGINS
+      - key: ADMIN_EMAIL
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: ADMIN_EMAIL
+      - key: ADMIN_PASSWORD
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: ADMIN_PASSWORD
+      - key: SERVER_FORWARD_HEADERS_STRATEGY
+        value: framework
+      - key: TRANSLATION_URL
+        value: ""
+
+  # ------------------------------------------------------------------ core de Japón
+  - type: web
+    name: jornal-core-jp
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./jornal-core/Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: APP_REGION
+        value: JP
+      - key: DATABASE_URL
+        fromDatabase:
+          name: jornal-db
+          property: connectionString
+      - key: DB_SCHEMA
+        value: core_jp
+      - key: SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE
+        value: "5"
+      - key: SPRING_DATA_REDIS_URL
+        fromService:
+          type: keyvalue
+          name: jornal-keyvalue
+          property: connectionString
+      - key: SPRING_RABBITMQ_ADDRESSES
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: SPRING_RABBITMQ_ADDRESSES
+      - key: MESSAGING_REGIONS
+        value: co,br,us,fr,jp,de
+      - key: MESSAGING_CONSUMERS
+        value: core,payments,notifications
+      # Mismo JWT, token interno, orígenes CORS y administrador inicial que jornal-core-co
+      - key: JWT_SECRET
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: JWT_SECRET
+      - key: JWT_ISSUER
+        value: jornal-render
+      - key: INTERNAL_TOKEN
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: INTERNAL_TOKEN
+      - key: CORS_ALLOWED_ORIGINS
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: CORS_ALLOWED_ORIGINS
+      - key: ADMIN_EMAIL
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: ADMIN_EMAIL
+      - key: ADMIN_PASSWORD
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: ADMIN_PASSWORD
+      - key: SERVER_FORWARD_HEADERS_STRATEGY
+        value: framework
+      - key: TRANSLATION_URL
+        value: ""
+
+  # ------------------------------------------------------------------ core de Alemania
+  - type: web
+    name: jornal-core-de
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./jornal-core/Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: APP_REGION
+        value: DE
+      - key: DATABASE_URL
+        fromDatabase:
+          name: jornal-db
+          property: connectionString
+      - key: DB_SCHEMA
+        value: core_de
+      - key: SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE
+        value: "5"
+      - key: SPRING_DATA_REDIS_URL
+        fromService:
+          type: keyvalue
+          name: jornal-keyvalue
+          property: connectionString
+      - key: SPRING_RABBITMQ_ADDRESSES
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: SPRING_RABBITMQ_ADDRESSES
+      - key: MESSAGING_REGIONS
+        value: co,br,us,fr,jp,de
+      - key: MESSAGING_CONSUMERS
+        value: core,payments,notifications
+      # Mismo JWT, token interno, orígenes CORS y administrador inicial que jornal-core-co
+      - key: JWT_SECRET
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: JWT_SECRET
+      - key: JWT_ISSUER
+        value: jornal-render
+      - key: INTERNAL_TOKEN
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: INTERNAL_TOKEN
+      - key: CORS_ALLOWED_ORIGINS
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: CORS_ALLOWED_ORIGINS
+      - key: ADMIN_EMAIL
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: ADMIN_EMAIL
+      - key: ADMIN_PASSWORD
+        fromService:
+          type: web
+          name: jornal-core-co
+          envVarKey: ADMIN_PASSWORD
+      - key: SERVER_FORWARD_HEADERS_STRATEGY
+        value: framework
+      - key: TRANSLATION_URL
         value: ""
 
   # ------------------------------------------------------------------ pagos
@@ -99,7 +450,7 @@ services:
           name: jornal-core-co
           envVarKey: SPRING_RABBITMQ_ADDRESSES
       - key: MESSAGING_REGIONS
-        value: co
+        value: co,br,us,fr,jp,de
       - key: MESSAGING_CONSUMERS
         value: core,payments,notifications
       - key: SERVER_FORWARD_HEADERS_STRATEGY
@@ -129,7 +480,7 @@ services:
           name: jornal-core-co
           envVarKey: SPRING_RABBITMQ_ADDRESSES
       - key: MESSAGING_REGIONS
-        value: co
+        value: co,br,us,fr,jp,de
       - key: MESSAGING_CONSUMERS
         value: core,payments,notifications
       # Mismo JWT y token interno que el core
@@ -145,17 +496,11 @@ services:
           type: web
           name: jornal-core-co
           envVarKey: INTERNAL_TOKEN
-      # Contacto del destinatario: se pide al core por su URL pública https://<host>.onrender.com
-      # (en el plan gratuito un servicio web no recibe tráfico de la red privada)
-      - key: CORE_URL_SCHEME
-        value: https
-      - key: CORE_HOST
-        fromService:
-          type: web
-          name: jornal-core-co
-          property: host
-      - key: CORE_HOST_SUFFIX
-        value: .onrender.com
+      # Contacto del destinatario: se pide al core de su región por su URL pública ({region} = co, br, us...).
+      # En el plan gratuito un servicio web no recibe tráfico de la red privada. Si Render le asigna a algún core
+      # otro subdominio (nombre ocupado), cambie este valor en el panel.
+      - key: CORE_URL_TEMPLATE
+        value: https://jornal-core-{region}.onrender.com
       - key: CORS_ALLOWED_ORIGINS
         fromService:
           type: web

@@ -7,8 +7,8 @@ sin gateway) y `scripts/verificar-render.mjs` (salud, CORS y flujo completo de v
 ## 0. Opción rápida: Blueprint (`render.yaml`)
 
 En Render: **New → Blueprint**, elija este repositorio y la rama. El archivo `render.yaml` crea de una vez la base
-PostgreSQL (free), el Key Value (free) y los servicios `jornal-core-co`, `jornal-payments` y `jornal-notifications`
-(Docker, free, Oregon). Render pide solo 4 valores:
+PostgreSQL (free), el Key Value (free), un core por región con datos (`jornal-core-co`, `-br`, `-us`, `-fr`, `-jp`
+y `-de`), `jornal-payments` y `jornal-notifications` (Docker, free, Oregon). Render pide solo 4 valores:
 
 | Variable (en jornal-core-co) | Valor |
 |---|---|
@@ -19,10 +19,13 @@ PostgreSQL (free), el Key Value (free) y los servicios `jornal-core-co`, `jornal
 
 - La base llega como `DATABASE_URL` (`postgresql://...`) y la aplicación la traduce a JDBC
   (`jornal-common`, `DatabaseUrlEnvironmentPostProcessor`).
-- `JWT_SECRET` e `INTERNAL_TOKEN` los genera Render; pagos y notificaciones copian del core el JWT, el token, la URL de
-  RabbitMQ y los orígenes CORS (`fromService` con `envVarKey`).
-- Notificaciones llama al core en `https://<host del core>.onrender.com` (`CORE_HOST` sale de `fromService`). Si Render
-  le pone otro subdominio público al core, defina `CORE_URL_TEMPLATE` con la URL real en notificaciones.
+- `JWT_SECRET` e `INTERNAL_TOKEN` los genera Render en `jornal-core-co`; los demás cores, pagos y notificaciones
+  copian de él el JWT, el token, la URL de RabbitMQ y los orígenes CORS (`fromService` con `envVarKey`). Los demás
+  cores copian también `ADMIN_EMAIL` y `ADMIN_PASSWORD`: el mismo administrador inicial en cada región.
+- Cada core usa su esquema (`core_co` … `core_de`) en la misma base y 5 conexiones (`SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE`).
+- Notificaciones llama al core de cada región en `CORE_URL_TEMPLATE=https://jornal-core-{region}.onrender.com`. Si
+  Render le pone otro subdominio público a algún core (nombre ocupado), cambie ese valor en notificaciones.
+- Datos de demostración en todas las regiones: `ADMIN_EMAIL=... ADMIN_PASSWORD=... node scripts/seed-render.mjs`.
 - Si después cambia la URL del frontend, actualice `CORS_ALLOWED_ORIGINS` en el core y vuelva a desplegar notificaciones.
 
 ## 1. Servicios
@@ -32,7 +35,7 @@ PostgreSQL (free), el Key Value (free) y los servicios `jornal-core-co`, `jornal
 | `core-co` | API de Colombia: cuentas, catálogo, perfil regional, vacantes, pagos de vacantes, consola | **Sí** (todas las pantallas) | **Desplegar** |
 | `notifications` | Bandeja de avisos, WebSocket `/ws` (mensaje emergente y avisos en vivo), correo | **Sí** (Mensajes, alertas) | **Desplegar** |
 | `payments` | Pago automático al trabajador (y cobros del flujo de pedidos anterior) | Sí, si se usa el pago automático | **Desplegar** |
-| `core-br`, `core-us`, `core-fr`, `core-jp`, `core-de` | Las demás regiones (mismo jar) | No para una demo de Colombia | Fuera |
+| `core-br`, `core-us`, `core-fr`, `core-jp`, `core-de` | Las demás regiones (mismo jar) | Sí, para mostrar varios países | **Desplegar** (`jornal-core-<región>`) |
 | `dispatch` | Asignación automática del flujo de pedidos anterior | No (el flujo de vacantes no lo usa) | Fuera |
 | `billing` | Comprobantes y tasas del flujo de pedidos anterior | No | Fuera |
 | `gateway` (Nginx) | Entrada única `/api/{región}` y `/subsystems/...` | No: se reemplaza por URL fijas | Fuera |
@@ -49,7 +52,7 @@ simulación de Render corre sin ellos).
 - **Hoy (Docker):** cada servicio tiene su base: `jornal_co` … `jornal_de` y `jornal_payments`, `jornal_dispatch`,
   `jornal_notifications`, `jornal_billing` (`infra/postgres/init-databases.sql`).
 - **Render:** todos usan la misma `SPRING_DATASOURCE_URL` y cada uno su esquema con la variable **`DB_SCHEMA`**:
-  `core_co`, `payments`, `notifications`.
+  `core_co` … `core_de`, `payments`, `notifications`.
   - Flyway crea el esquema y su tabla de historial ahí (`spring.flyway.schemas` / `default-schema`).
   - Cada conexión ejecuta `SET search_path TO <DB_SCHEMA>, public` (Hikari `connection-init-sql`), así JPA, JDBC,
     el Outbox de Spring Modulith y ShedLock usan su esquema sin cambiar código ni migraciones.
@@ -71,7 +74,7 @@ proceso y región, y cola de mensajes muertos. Render no lo ofrece; se propone *
 
 - Conexión por variable: **`SPRING_RABBITMQ_ADDRESSES`**=`amqps://usuario:clave@host/vhost` (la «AMQP URL» que
   muestra CloudAMQP). Si no está, se usan `RABBITMQ_HOST/PORT/USER/PASSWORD` como en Docker.
-- **`MESSAGING_REGIONS=co`** y **`MESSAGING_CONSUMERS=core,payments,notifications`**: solo se declaran las colas
+- **`MESSAGING_REGIONS=co,br,us,fr,jp,de`** (las regiones desplegadas, en todos los servicios) y **`MESSAGING_CONSUMERS=core,payments,notifications`**: solo se declaran las colas
   de lo desplegado (sin colas de `dispatch`/`billing` que nadie consumiría).
 
 ## 4. Cada servicio desplegable
@@ -96,16 +99,18 @@ No hay descubrimiento de servicios. En Docker el gateway Nginx enruta por nombre
 | `/api/co/...` | `https://<core-co>.onrender.com/...` |
 | `/subsystems/notifications/...` | `https://<notifications>.onrender.com/...` |
 | WebSocket `/subsystems/notifications/ws` | `wss://<notifications>.onrender.com/ws` |
-| notificaciones → core (`http://core-{region}:8080`) | `CORE_URL_TEMPLATE=https://<core-co>.onrender.com` |
+| notificaciones → core (`http://core-{region}:8080`) | `CORE_URL_TEMPLATE=https://jornal-core-{region}.onrender.com` |
 
 - En el plan gratuito los servicios se comunican por sus URL públicas `https://…onrender.com`.
 - La consulta interna `/internal/contacts` (notificaciones → core) ya no la bloquea el gateway; la protege el
   token `INTERNAL_TOKEN`, que debe ser largo, aleatorio e igual en el core y en notificaciones.
-- **Frontend (siguiente paso):** necesitará dos variables (URL del core y de notificaciones) en lugar de las rutas
-  `/api/{región}` y `/subsystems/...` del proxy de Vite, y mostrar solo Colombia.
+- **Frontend:** `VITE_API_BASE_URL=https://jornal-core-{region}.onrender.com`, `VITE_REGIONS=co,br,us,fr,jp,de`,
+  `VITE_NOTIFICATIONS_URL` y `VITE_WS_URL` (URL de notificaciones).
 
 ### Plan gratuito: tenga en cuenta
 
+- Son 8 servicios web gratuitos: las horas gratuitas del mes se comparten entre todos (solo cuentan mientras
+  están despiertos).
 - Los servicios se duermen tras ~15 minutos sin tráfico; la primera petición tarda cerca de un minuto. Mientras
   notificaciones o pagos duermen, sus mensajes esperan en CloudAMQP y se procesan al despertar.
 - Sin SMTP configurado, los correos quedan como `FAILED` en el registro de entregas; la app sigue funcionando.
