@@ -1,0 +1,97 @@
+# Simulación local del despliegue en Render: PostgreSQL 18 con UNA sola base (un esquema por servicio),
+# solo los 3 servicios que necesita el frontend (core-co, payments, notifications), sin gateway, cada servicio
+# escuchando en PORT y conectado por las mismas variables que se ponen en Render.
+#
+#   docker compose -f infra/docker-compose.render.yml up -d --build
+#   core:          http://localhost:18080   (en Render: https://<core>.onrender.com)
+#   notifications: http://localhost:18083   (en Render: https://<notifications>.onrender.com)
+#   docker compose -f infra/docker-compose.render.yml down -v      # borra todo
+#
+# Valores FICTICIOS, solo para esta simulación.
+name: jornal-render
+
+x-render-env: &render-env
+  SPRING_PROFILES_ACTIVE: prod
+  PORT: "10000"                                   # Render usa 10000 por defecto
+  SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/jornal
+  SPRING_DATASOURCE_USERNAME: render_user
+  SPRING_DATASOURCE_PASSWORD: render-dev-password
+  SPRING_RABBITMQ_ADDRESSES: amqp://render:render-dev-password@broker:5672/
+  MESSAGING_REGIONS: co
+  MESSAGING_CONSUMERS: core,payments,notifications
+  JWT_SECRET: render-sim-secret-change-me-32-bytes-min
+  JWT_ISSUER: jornal-render
+  INTERNAL_TOKEN: render-sim-internal-token
+  SERVER_FORWARD_HEADERS_STRATEGY: framework
+  CORS_ALLOWED_ORIGINS: http://localhost:4200,https://*.onrender.com
+
+x-health: &health
+  test: ["CMD-SHELL", "curl -fs http://localhost:10000/actuator/health || exit 1"]
+  interval: 10s
+  timeout: 5s
+  start_period: 90s
+  retries: 12
+
+services:
+  core-co:
+    image: jornal/core:dev
+    build: { context: .., dockerfile: jornal-core/Dockerfile }
+    depends_on: { db: { condition: service_healthy }, broker: { condition: service_healthy }, keyvalue: { condition: service_healthy } }
+    environment:
+      <<: *render-env
+      DB_SCHEMA: core_co
+      APP_REGION: CO
+      SPRING_DATA_REDIS_URL: redis://keyvalue:6379
+      ADMIN_EMAIL: admin@render.test
+      ADMIN_PASSWORD: Admin12345
+    ports: ["18080:10000"]
+    healthcheck: *health
+
+  payments:
+    image: jornal/payments:dev
+    build: { context: .., dockerfile: jornal-payments/Dockerfile }
+    depends_on: { db: { condition: service_healthy }, broker: { condition: service_healthy } }
+    environment:
+      <<: *render-env
+      DB_SCHEMA: payments
+    healthcheck: *health
+
+  notifications:
+    image: jornal/notifications:dev
+    build: { context: .., dockerfile: jornal-notifications/Dockerfile }
+    depends_on: { db: { condition: service_healthy }, broker: { condition: service_healthy } }
+    environment:
+      <<: *render-env
+      DB_SCHEMA: notifications
+      CORE_URL_TEMPLATE: http://core-co:10000        # en Render: la URL pública del core
+    ports: ["18083:10000"]
+    healthcheck: *health
+
+  # ---- equivalentes locales de: base de Render (PostgreSQL 18), CloudAMQP y Key Value de Render
+  db:
+    image: postgis/postgis:18-3.6
+    environment:
+      POSTGRES_DB: jornal
+      POSTGRES_USER: render_user
+      POSTGRES_PASSWORD: render-dev-password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U render_user -d jornal"]
+      interval: 5s
+      retries: 20
+
+  broker:
+    image: rabbitmq:4-management
+    environment:
+      RABBITMQ_DEFAULT_USER: render
+      RABBITMQ_DEFAULT_PASS: render-dev-password
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      retries: 12
+
+  keyvalue:
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20

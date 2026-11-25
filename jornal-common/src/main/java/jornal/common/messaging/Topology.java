@@ -48,6 +48,11 @@ public final class Topology {
     }
 
     public static Declarables declarables(List<String> regions) {
+        return declarables(regions, List.of());
+    }
+
+    /** Topología de las regiones dadas; {@code consumers} vacío declara las colas de todos los procesos. */
+    public static Declarables declarables(List<String> regions, List<String> consumers) {
         List<Declarable> all = new ArrayList<>();
         TopicExchange events = ExchangeBuilder.topicExchange(EXCHANGE).durable(true).build();
         FanoutExchange dlx = ExchangeBuilder.fanoutExchange(DEAD_LETTER_EXCHANGE).durable(true).build();
@@ -59,6 +64,7 @@ public final class Topology {
         all.add(ExchangeBuilder.topicExchange(LIVE_EXCHANGE).durable(false).build());
 
         SUBSCRIPTIONS.forEach((consumer, patterns) -> {
+            if (!consumers.isEmpty() && !consumers.contains(consumer)) return;
             for (String region : regions) {
                 Queue queue = QueueBuilder.durable(queue(consumer, region))
                         .withArguments(Map.of("x-dead-letter-exchange", DEAD_LETTER_EXCHANGE))

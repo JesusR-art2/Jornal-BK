@@ -1,5 +1,7 @@
 server:
-  port: ${SERVER_PORT:8082}
+  # Render asigna el puerto en PORT
+  port: ${PORT:${SERVER_PORT:8082}}
+  forward-headers-strategy: ${SERVER_FORWARD_HEADERS_STRATEGY:none}
 spring:
   application:
     name: jornal-dispatch
@@ -7,11 +9,16 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/jornal_dispatch}
     username: ${DB_USER:jornalAdmin}
     password: ${DB_PASSWORD:change-me}
+    # Render (una sola base): cada servicio en su esquema (DB_SCHEMA). public queda en la ruta para PostGIS.
+    hikari:
+      connection-init-sql: SET search_path TO ${DB_SCHEMA:public}, public
   data:
     redis:
+      # Render Key Value u otro Redis: variable SPRING_DATA_REDIS_URL=redis://... (reemplaza host y puerto)
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
   rabbitmq:
+    # CloudAMQP u otro broker externo: variable SPRING_RABBITMQ_ADDRESSES=amqps://usuario:clave@host/vhost
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:guest}
@@ -26,11 +33,14 @@ spring:
           multiplier: 2
   flyway:
     locations: classpath:db/subsystem,classpath:db/migration
+    schemas: ${DB_SCHEMA:public}
+    default-schema: ${DB_SCHEMA:public}
 jornal:
   subsystem:
     name: dispatch
   messaging:
     regions: ${MESSAGING_REGIONS:co,br,us,fr,jp}
+    consumers: ${MESSAGING_CONSUMERS:}   # vacío = todos; en Render: core,payments,notifications
   security:
     jwt:
       # Mismo secreto y emisor que los cores: dispatch valida el token del trabajador y del cliente.

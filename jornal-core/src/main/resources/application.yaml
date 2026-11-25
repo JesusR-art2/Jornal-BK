@@ -1,3 +1,6 @@
+server:
+  # Render asigna el puerto en PORT
+  port: ${PORT:${SERVER_PORT:8080}}
 jornal:
   region:
     # País que atiende esta instancia. Debe existir en region_profiles.
@@ -35,6 +38,7 @@ jornal:
   messaging:
     # Regiones con colas en RabbitMQ (minúsculas). La topología se declara en todos los procesos.
     regions: ${MESSAGING_REGIONS:co,br,us,fr,jp}
+    consumers: ${MESSAGING_CONSUMERS:}   # vacío = todos; en Render: core,payments,notifications
   admin:
     email: ${ADMIN_EMAIL:}
     password: ${ADMIN_PASSWORD:}

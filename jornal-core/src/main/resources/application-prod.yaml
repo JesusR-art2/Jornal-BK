@@ -7,18 +7,31 @@ spring:
   docker:
     compose:
       enabled: false
+  # En Render se puede usar SPRING_DATASOURCE_URL/USERNAME/PASSWORD en lugar de DB_URL/DB_USER/DB_PASSWORD.
   datasource:
-    url: ${DB_URL}
-    username: ${DB_USER}
-    password: ${DB_PASSWORD}
+    url: ${DB_URL:}
+    username: ${DB_USER:}
+    password: ${DB_PASSWORD:}
+    # Render (una sola base): cada servicio en su esquema (DB_SCHEMA). public queda en la ruta para PostGIS.
+    hikari:
+      connection-init-sql: SET search_path TO ${DB_SCHEMA:public}, public
+  flyway:
+    schemas: ${DB_SCHEMA:public}
+    default-schema: ${DB_SCHEMA:public}
+    # Extensiones en public antes de migrar: así sirven a todos los esquemas de una base compartida
+    init-sqls:
+      - CREATE EXTENSION IF NOT EXISTS postgis SCHEMA public;
+      - CREATE EXTENSION IF NOT EXISTS unaccent SCHEMA public;
   rabbitmq:
-    host: ${RABBITMQ_HOST}
+    # CloudAMQP u otro broker externo: variable SPRING_RABBITMQ_ADDRESSES=amqps://usuario:clave@host/vhost
+    host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USER}
-    password: ${RABBITMQ_PASSWORD}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
   data:
     redis:
-      host: ${REDIS_HOST}
+      # Render Key Value u otro Redis: variable SPRING_DATA_REDIS_URL=redis://... (reemplaza host y puerto)
+      host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
 

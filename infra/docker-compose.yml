@@ -57,8 +57,7 @@ x-core: &core
   image: jornal/core:dev
   build:
     context: ..
-    args:
-      MODULE: jornal-core
+    dockerfile: jornal-core/Dockerfile
 
 x-subsystem-env: &subsystem-env
   SERVER_PORT: "8080"
@@ -132,7 +131,7 @@ services:
   payments:
     <<: *app
     image: jornal/payments:dev
-    build: { context: .., args: { MODULE: jornal-payments } }
+    build: { context: .., dockerfile: jornal-payments/Dockerfile }
     environment:
       <<: *subsystem-env
       DB_URL: jdbc:postgresql://postgres:5432/jornal_payments
@@ -140,7 +139,7 @@ services:
   dispatch:
     <<: *app
     image: jornal/dispatch:dev
-    build: { context: .., args: { MODULE: jornal-dispatch } }
+    build: { context: .., dockerfile: jornal-dispatch/Dockerfile }
     environment:
       <<: *subsystem-env
       DB_URL: jdbc:postgresql://postgres:5432/jornal_dispatch
@@ -151,7 +150,7 @@ services:
   notifications:
     <<: *app
     image: jornal/notifications:dev
-    build: { context: .., args: { MODULE: jornal-notifications } }
+    build: { context: .., dockerfile: jornal-notifications/Dockerfile }
     environment:
       <<: *subsystem-env
       DB_URL: jdbc:postgresql://postgres:5432/jornal_notifications
@@ -163,7 +162,7 @@ services:
   billing:
     <<: *app
     image: jornal/billing:dev
-    build: { context: .., args: { MODULE: jornal-billing } }
+    build: { context: .., dockerfile: jornal-billing/Dockerfile }
     environment:
       <<: *subsystem-env
       DB_URL: jdbc:postgresql://postgres:5432/jornal_billing

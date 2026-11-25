@@ -45,7 +45,7 @@ class JapanRegionIntegrationTest {
                          "acceptedTerms":true}
                         """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value("リクエストに無効な項目があります"));
+                .andExpect(jsonPath("$.detail").value("入力内容に誤りがあります"));
 
         mvc.perform(get("/region-profile"))
                 .andExpect(status().isOk())

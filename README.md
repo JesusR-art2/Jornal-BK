@@ -57,6 +57,8 @@ Plataforma tipo Uber para que personas, tiendas o empresas soliciten un ayudante
 
 ## Cómo correrlo
 
+> **Despliegue en Render:** ver [docs/DESPLIEGUE-RENDER.md](docs/DESPLIEGUE-RENDER.md) (una sola base PostgreSQL 18 con un esquema por servicio, CloudAMQP, un Dockerfile por servicio y simulación local en `infra/docker-compose.render.yml`).
+
 ### 1. Crear el archivo `.env`
 
 El `.env` **no se sube a git**. Créalo en la raíz a partir de `.env.example`:
@@ -225,7 +227,7 @@ Pendiente (P2 de la fase F2): firma RS256 con JWKS para que los subsistemas vali
 ```
 jornal
 ├── pom.xml                        # padre multimódulo (jornal-parent)
-├── Dockerfile                     # multietapa; --build-arg MODULE=jornal-core|jornal-payments|...
+├── jornal-*/Dockerfile            # uno por servicio, multietapa (contexto: raíz del repositorio)
 ├── docker-compose.yaml            # desarrollo del core: PostGIS, Redis y RabbitMQ
 ├── infra/                         # sistema completo: docker-compose.yml, nginx, postgres, prometheus, grafana
 ├── scripts/                       # demo-mensajeria.sh (Outbox → RabbitMQ → inbox), demo-pagos.sh (F5)

@@ -48,7 +48,8 @@ public class IntegrationConfig {
      * y los subsistemas las consumen cuando se les agrega la región. Declarar dos veces es inofensivo.
      */
     @Bean
-    Declarables ownRegionTopology(@Value("${jornal.region.code}") String region) {
-        return Topology.declarables(List.of(region.toLowerCase(Locale.ROOT)));
+    Declarables ownRegionTopology(@Value("${jornal.region.code}") String region,
+                                  jornal.common.messaging.MessagingProperties messaging) {
+        return Topology.declarables(List.of(region.toLowerCase(Locale.ROOT)), messaging.consumers());
     }
 }

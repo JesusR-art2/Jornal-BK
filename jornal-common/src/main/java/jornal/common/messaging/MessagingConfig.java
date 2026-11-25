@@ -15,7 +15,7 @@ public class MessagingConfig {
 
     @Bean
     Declarables jornalTopology(MessagingProperties properties) {
-        return Topology.declarables(properties.regions());
+        return Topology.declarables(properties.regions(), properties.consumers());
     }
 
     @Bean

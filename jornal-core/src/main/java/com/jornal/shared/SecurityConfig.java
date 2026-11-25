@@ -89,7 +89,8 @@ public class SecurityConfig {
         CorsConfiguration cors = new CorsConfiguration();
         cors.setAllowedOriginPatterns(properties.allowedOrigins());
         cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept-Language", "Idempotency-Key"));
+        cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Accept-Language", "Idempotency-Key",
+                "X-Correlation-Id"));
         cors.setExposedHeaders(List.of("Content-Language", "Location"));
         cors.setAllowCredentials(false);   // el token va en el header Authorization, no en cookies
         cors.setMaxAge(Duration.ofHours(1));

@@ -1,5 +1,7 @@
 server:
-  port: ${SERVER_PORT:8081}
+  # Render asigna el puerto en PORT
+  port: ${PORT:${SERVER_PORT:8081}}
+  forward-headers-strategy: ${SERVER_FORWARD_HEADERS_STRATEGY:none}
 spring:
   application:
     name: jornal-payments
@@ -7,7 +9,11 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/jornal_payments}
     username: ${DB_USER:jornalAdmin}
     password: ${DB_PASSWORD:change-me}
+    # Render (una sola base): cada servicio en su esquema (DB_SCHEMA). public queda en la ruta para PostGIS.
+    hikari:
+      connection-init-sql: SET search_path TO ${DB_SCHEMA:public}, public
   rabbitmq:
+    # CloudAMQP u otro broker externo: variable SPRING_RABBITMQ_ADDRESSES=amqps://usuario:clave@host/vhost
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:guest}
@@ -22,11 +28,14 @@ spring:
           multiplier: 2
   flyway:
     locations: classpath:db/subsystem,classpath:db/migration
+    schemas: ${DB_SCHEMA:public}
+    default-schema: ${DB_SCHEMA:public}
 jornal:
   subsystem:
     name: payments
   messaging:
     regions: ${MESSAGING_REGIONS:co,br,us,fr,jp}
+    consumers: ${MESSAGING_CONSUMERS:}   # vacío = todos; en Render: core,payments,notifications
   payments:
     simulator:
       failure-rate: ${PAYMENTS_FAILURE_RATE:0}              # 0..1: probabilidad de rechazo
