@@ -1,7 +1,7 @@
 # Prueba de localización (sección 8)
 
-- Fecha de la corrida: 2026-11-25T04:34:56.060231800Z
-- Versión: f8e4231
+- Fecha de la corrida: 2026-11-25T05:19:03.375716900Z
+- Versión: ver `git log`
 - Prueba: `jornal-core/src/test/java/com/jornal/LocalizationReportTest.java` (script `scripts/prueba-localizacion.sh`)
 - Pedido D4: 2 jornadas de bodega + 1 recargo de desplazamiento + propina según el país. Reloj fijo a las 20:30 locales del 15/11/2026.
 - Valores de impuestos, precios y tarifas: de los perfiles regionales, marcados VERIFICAR.
