@@ -105,16 +105,18 @@ docker compose -f infra/docker-compose.yml --profile full down                  
 
 | Servicio | Dirección |
 |---|---|
-| Gateway (entrada única) | `http://localhost:8000/api/{co,br,us,fr,jp}/...` o `http://co.jornal.localhost:8000/...` |
+| Gateway (entrada única) | `http://localhost:8000/api/{co,br,us,fr,jp}/...` o `http://co.jornal.localhost:8000/...`; con TLS: `https://localhost:8443/...` y `https://co.jornal.localhost:8443/...` |
 | Estado de un subsistema | `http://localhost:8000/subsystems/payments/status` (también dispatch, notifications, billing) |
 | Swagger de una región | `http://localhost:8000/api/co/swagger-ui.html` |
 | RabbitMQ (consola) | `http://localhost:15673` (jornal / jornal-dev-password) |
 | Mailpit (correos de los avisos) | `http://localhost:8025` |
-| WebSocket de avisos (STOMP) | `ws://localhost:8000/subsystems/notifications/ws` (JWT en el CONNECT) |
+| WebSocket de avisos (STOMP) | `ws://localhost:8000/subsystems/notifications/ws` o `wss://localhost:8443/subsystems/notifications/ws` (JWT en el CONNECT) |
 | Prometheus / Grafana | `http://localhost:9090` / `http://localhost:3000` (admin / admin; tablero «Jornal: sistema distribuido» en la carpeta Jornal) |
 | PostgreSQL | `localhost:55432` (bases `jornal_co` ... `jornal_jp` y una por subsistema) |
 
 Administrador de cada región: `admin@{co,br,us,fr,jp}.jornal.test` / `Admin12345`. Si una región está apagada, el gateway responde `503 SERVICE_UNAVAILABLE` solo para ella. Cada JVM corre con `-Xmx256m` (unos 420 MB por core).
+
+**TLS de desarrollo:** el gateway (`infra/nginx/Dockerfile`) genera al primer arranque un certificado autofirmado para `localhost`, `jornal.localhost` y `*.jornal.localhost` (TLS 1.2 y 1.3, HTTP/2). Lo guarda en el volumen `jornal-certs`, así la excepción del navegador sobrevive a los reinicios. El gateway pasa `X-Forwarded-Proto` a los servicios. Para confiar en él sin avisos, sácalo con `docker compose -f infra/docker-compose.yml cp gateway:/etc/nginx/certs/jornal-dev.crt .` e impórtalo como certificado de confianza, o úsalo en curl con `--cacert jornal-dev.crt`. HTTP en el puerto 8000 sigue disponible para los scripts y el proxy de Angular. En producción se usan certificados públicos por dominio regional.
 
 ### 3. Comprobar que funciona
 
@@ -633,7 +635,6 @@ La siguiente migración libre del core es `V18`. Los subsistemas usan `jornal-co
 El orden y los criterios de terminado están en [`documento.md`](documento.md):
 
 - **F2 (P2)** RS256 con JWKS y límite de intentos de login con Redis
-- **F3 (pendiente menor)** TLS de desarrollo en el gateway (hoy HTTP en el puerto 8000)
 - **F9** frontend (plan en `documento.md`)
 
 ---

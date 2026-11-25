@@ -30,7 +30,7 @@ El backend distribuido está construido y verificado: F0 a F8, F10 y F11 cerrada
 | F1. Perfil regional y localización | Hecha | `b1c0ead` | Catálogo en 5 idiomas, validación de nombre, dirección y documento por país, prueba sin condicionales por país |
 | F2. Seguridad (P1) | Hecha | `068c35c` | Access token de 15 min con claim `region`, refresh con rotación y detección de reuso, CORS y Swagger con Bearer |
 | F2. Seguridad (P2) | Pendiente | — | RS256 con JWKS y límite de intentos de login con Redis |
-| F3. Procesos e infraestructura | Hecha (falta TLS) | `3507e0c` | `docker compose up` con 5 cores, 4 subsistemas y gateway; `scripts/demo-mensajeria.sh` |
+| F3. Procesos e infraestructura | Hecha | `3507e0c` | `docker compose up` con 5 cores, 4 subsistemas y gateway; `scripts/demo-mensajeria.sh`; TLS de desarrollo en el gateway (P2, puerto 8443) |
 | F4. Pedidos y saga | Hecha | `43a65e1` | Camino feliz y compensaciones con subsistemas simulados en pruebas |
 | F5. Pagos | Hecha | `873bdbb` | Tres flujos de pago, idempotencia; `scripts/demo-pagos.sh` |
 | F6. Asignación y seguimiento | Hecha | `6e17431` | Una sola reserva con 8 aceptaciones simultáneas; `scripts/demo-asignacion.sh` |
@@ -317,7 +317,7 @@ Son 12 fases en orden; cada una cierra con un criterio verificable. Si el tiempo
 - Spring Modulith: `starter-jpa` (registro de publicaciones como Outbox) y `events-amqp` para externalizar los eventos marcados, con el sobre CloudEvents. Tabla inbox en cada consumidor.
 - Esqueleto de los 4 subsistemas con Actuator, conexión a RabbitMQ y las mismas convenciones de errores.
 
-- [x] Terminado cuando `docker compose up` levanta todo y un evento publicado en `core-co` llega a `payments.co` y se procesa una sola vez aunque se reenvíe. Hecho en `3507e0c` (`scripts/demo-mensajeria.sh`). Pendiente menor: TLS de desarrollo en el gateway (hoy HTTP en el puerto 8000).
+- [x] Terminado cuando `docker compose up` levanta todo y un evento publicado en `core-co` llega a `payments.co` y se procesa una sola vez aunque se reenvíe. Hecho en `3507e0c` (`scripts/demo-mensajeria.sh`). TLS de desarrollo en el gateway: hecho después (P2), certificado autofirmado en el puerto 8443.
 
 ### F4. Solicitudes, carrito y saga (P1)
 
@@ -526,9 +526,9 @@ En orden. Cada paso cierra con pruebas en verde, README actualizado y su commit 
    - los valores `VERIFICAR` de impuestos, festivos, precios de demostración, emisores ficticios por país y tasas de cambio simuladas, con su fuente oficial.
 4. **F9, frontend:** iteraciones I0 a I6 según la sección F9.
 5. **P2, si sobra tiempo,** en este orden por valor para la sustentación:
-   1. TLS de desarrollo en el gateway (certificado autofirmado en `infra/`).
-   2. Límite de intentos de login con Redis (`AUTH002`).
-   3. Caché del catálogo en Redis con TTL.
+   1. ~~TLS de desarrollo en el gateway~~ (hecho: certificado autofirmado generado por el gateway, HTTPS en 8443).
+   2. ~~Límite de intentos de login con Redis (`AUTH002`)~~ (hecho).
+   3. ~~Caché del catálogo en Redis con TTL~~ (hecho).
    4. Sexto país solo con datos: Alemania, con una migración de perfil y sin tocar código.
    5. RS256 con JWKS (D10): una clave por región y los subsistemas validando con la clave pública del emisor.
    6. Carrito guardado (`DRAFT`).

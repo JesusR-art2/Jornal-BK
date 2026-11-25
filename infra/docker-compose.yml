@@ -154,12 +154,15 @@ services:
 
   # ------------------------------------------------------------------ entrada
   gateway:
-    image: nginx:1.27-alpine
+    image: jornal/gateway:dev
+    build: ./nginx            # nginx + certificado TLS autofirmado de desarrollo (se genera al primer arranque)
     restart: unless-stopped
     ports:
       - "${GATEWAY_PORT:-8000}:80"
+      - "${GATEWAY_TLS_PORT:-8443}:443"   # https://localhost:8443/api/co/...
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - jornal-certs:/etc/nginx/certs
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/health || exit 1"]
       interval: 10s
@@ -239,3 +242,4 @@ services:
 volumes:
   jornal-pgdata:
   jornal-rabbitmq:
+  jornal-certs:
